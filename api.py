@@ -35,7 +35,7 @@ app = FastAPI(
     title="Medical Conversation API",
     description="AI-powered medical consultation system using PocketFlow",
     version="1.0.0",
-    docs_url="/docs",
+    docs_url="/api/docs",
     redoc_url="/redoc"
 )
 
