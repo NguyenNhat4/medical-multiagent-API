@@ -5,24 +5,28 @@ services:
     image: postgres:15-alpine
     container_name: chatbot-postgres
     environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_DB: chatbot_rhm
+      TZ: Asia/Ho_Chi_Minh
     ports:
-      - "${POSTGRES_PORT}:5432"
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
-    env_file:
-      - .env
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     networks:
       - chatbot-network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 30s
-      timeout: 10s
+      # check via loopback to avoid DNS issues
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -h 127.0.0.1 -U postgres -d chatbot_rhm || exit 1",
+        ]
+      interval: 10s
+      timeout: 5s
       retries: 5
+      start_period: 10s
 
   chatbot-rhm-api:
     build:
