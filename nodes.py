@@ -16,7 +16,6 @@ from utils.helpers import (
     get_topics_by_role,
     get_fallback_topics_by_role,
     get_most_relevant_QA,
-    build_history_text,
     get_context_for_input_type,
     get_context_for_knowledge_case,
     get_score_threshold,
