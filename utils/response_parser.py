@@ -138,7 +138,16 @@ def _extract_from_code_fences(response: str) -> Optional[str]:
     - ```YML ... ```
     - ``` ... ``` (generic)
     """
-    # Improved YAML code fence patterns - more flexible with whitespace
+    # A more robust pattern to capture content within fences
+    pattern = r'```(yaml|yml)?\s*\n(.*?)```'
+    match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
+    if match:
+        content = match.group(2).strip()
+        if content:
+            logger.debug(f"_extract_from_code_fences: Found content with robust pattern")
+            return content
+
+    # Fallback to original patterns if the above fails
     yaml_patterns = [
         r'```yaml\s*\n(.*?)\n\s*```',
         r'```YAML\s*\n(.*?)\n\s*```', 
@@ -155,41 +164,10 @@ def _extract_from_code_fences(response: str) -> Optional[str]:
     for pattern in yaml_patterns:
         match = re.search(pattern, response, re.DOTALL | re.IGNORECASE)
         if match:
-            content = match.group(1)
-            if content and len(content) > 0:
-                # Additional cleanup - normalize indentation
-                lines = content.split('\n')
-                # Remove empty lines at start and end
-                while lines and not lines[0].strip():
-                    lines.pop(0)
-                while lines and not lines[-1].strip():
-                    lines.pop()
-
-                if lines:
-                    # Find minimum indentation (excluding empty lines)
-                    non_empty_lines = [line for line in lines if line.strip()]
-                    if non_empty_lines:
-                        min_indent = min(len(line) - len(line.lstrip()) for line in non_empty_lines)
-                        # Remove common indentation from all lines
-                        cleaned_lines = []
-                        for line in lines:
-                            if line.strip():  # Non-empty line
-                                if len(line) >= min_indent:
-                                    cleaned_lines.append(line[min_indent:])
-                                else:
-                                    cleaned_lines.append(line.lstrip())  # Remove all leading whitespace if less than min
-                            else:  # Empty line
-                                cleaned_lines.append('')
-                        cleaned_content = '\n'.join(cleaned_lines)
-                        # Only strip leading/trailing empty lines, preserve internal spacing
-                        cleaned_content = cleaned_content.strip('\n')
-                    else:
-                        cleaned_content = content.strip()
-                else:
-                    cleaned_content = content.strip()
-
+            content = match.group(1).strip()
+            if content:
                 logger.debug(f"_extract_from_code_fences: Found content with pattern {pattern}")
-                return cleaned_content
+                return content
     
     return None
 
@@ -374,8 +352,18 @@ def parse_medical_response(raw_response: str,
     parsed = parse_yaml_response(raw_response)
 
     if isinstance(parsed, dict):
-        explanation = parsed.get("explanation") or parsed.get("answer") or raw_response
-        summary = parsed.get("summary") or _fallback_summary(explanation)
+        # Support multiple key variants from different prompt versions
+        explanation = (
+          
+             parsed.get("explanation")
+            or parsed.get("answer")
+            or raw_response
+        )
+        summary = (
+            parsed.get("sumary")  # new misspelled key per prompt schema
+            or parsed.get("summary")
+            or _fallback_summary(str(explanation))
+        )
         suggestions = parsed.get("questionSuggestion") or parsed.get("questions") or raw_suggestions
         suggestions = _normalize_suggestions(
             suggestions,
@@ -406,7 +394,7 @@ def handle_greeting_response(raw_response: str) -> Tuple[str, str, List[str]]:
     Specialized formatting for greeting inputs.
     """
     explanation = (raw_response or "Xin chào! Tôi có thể hỗ trợ gì cho bạn hôm nay?").strip()
-    summary = "Chào hỏi và sẵn sàng hỗ trợ."
+    summary = ""
     suggestions = [
         "Tôi muốn hỏi về một vấn đề răng miệng.",
         "Tôi có triệu chứng X, cần tư vấn.",

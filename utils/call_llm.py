@@ -57,8 +57,8 @@ def call_llm(prompt: str, fast_mode: bool = True) -> str:
         
         if response_text:
             logger.info(f"✅ Nhận được response từ LLM: {len(response_text)} characters")
-            logger.info(f"📤 Response preview: {response_text[:100]}...")
-        
+            logger.info(f"📤 Response preview: {response_text}")
+
         return response_text or "Xin lỗi, không thể tạo response."
         
     except Exception as e:

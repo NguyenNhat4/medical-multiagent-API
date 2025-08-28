@@ -7,7 +7,7 @@ import logging
 import re
 import yaml
 from .call_llm import call_llm
-from .kb import retrieve_random_by_role
+from .kb import retrieve, retrieve_random_by_role
 from .response_parser import parse_yaml_response, validate_yaml_structure
 
 logger = logging.getLogger(__name__)
@@ -21,17 +21,15 @@ def get_persona_for(role: str) -> Dict[str, str]:
             "persona": "Bác sĩ nội tiết (chuyên ĐTĐ)",
             "audience": "bác sĩ nha khoa",
             "tone": (
-                "Giải thích ngắn gọn, chính xác, nhấn mạnh liên hệ kiểm soát đường huyết với chăm sóc nha chu,"
-                " khuyến cáo phối hợp lâm sàng rõ ràng."
+                "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nha khoa hiểu, mục tiêu giúp bác sĩ nha khoa hiểu hơn về nội tiết "
             ),
         }
     if "bác sĩ nội tiết" in rl:
         return {
-            "persona": "Bác sĩ nha khoa (ưu tiên nha chu)",
+            "persona": "Bác sĩ nha khoa",
             "audience": "bác sĩ nội tiết",
             "tone": (
-                "Tập trung biến chứng răng miệng ảnh hưởng kiểm soát đường huyết,"
-                " trình bày quy trình điều trị nha khoa an toàn cho ĐTĐ."
+                "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nội tiết hiểu, mục tiêu giúp bác sĩ nội tiết hiểu hơn về nha khoa phục vụ cho nghành nghề của mình"
             ),
         }
     if "bệnh nhân đái tháo đường" in rl or "đái tháo đường" in rl:
@@ -39,7 +37,7 @@ def get_persona_for(role: str) -> Dict[str, str]:
             "persona": "Bác sĩ nội tiết",
             "audience": "bệnh nhân",
             "tone": (
-                "Ngôn ngữ giản dị, thực hành, an toàn; đưa bước cụ thể và khi nào cần khám nha khoa."
+                "Thái độ thân thiện, Ngôn ngữ giản dị, không nói dài dòng,không dùng từ chuyên môn. "
             ),
         }
     # Bệnh nhân nha khoa (mặc định)
@@ -47,7 +45,7 @@ def get_persona_for(role: str) -> Dict[str, str]:
         "persona": "Bác sĩ nha khoa",
         "audience": "bệnh nhân",
         "tone": (
-            "Ngôn ngữ thân thiện, chú trọng chăm sóc răng miệng hằng ngày và cảnh báo khi cần kiểm tra đường huyết."
+            "Thái độ thân thiện, Ngôn ngữ thân thiện, không  dùng từ chuyên môn"
         ),
     }
 
@@ -117,131 +115,58 @@ def get_fallback_topics_by_role(role: str) -> List[str]:
             "Tần suất khám nha khoa định kỳ"
         ]
 
-
-def get_intro_by_context(context: str, role: str, query: str, retrieval_score: float, persona: Dict[str, str]) -> str:
-    """Generate intro message based on context and role"""
-    audience = persona.get("audience", "người dùng")
-    
-    if context == "greeting":
-        return f"Xin chào! Tôi là ai agent hỗ trợ tư vấn y khoa.\n\nTôi có thể giúp bạn tư vấn về các chủ đề sau:"
-        
-    elif context == "medical_low_score":
-        return f"Tôi hiểu câu hỏi của bạn, nhưng không tìm thấy thông tin cụ thể trong cơ sở tri thức (điểm tương đồng: {retrieval_score:.2f}).\n\nTôi gợi ý một số chủ đề liên quan phù hợp với {audience}:"
-        
-    elif context == "statement":
-        return f"Cảm ơn bạn đã chia sẻ thông tin. Để tôi có thể hỗ trợ tốt hơn, bạn có muốn tìm hiểu về các chủ đề sau không:"
-        
-    elif context == "nonsense":
-        return f"Xin lỗi, tôi không hiểu ý bạn. Bạn có thể đặt câu hỏi rõ ràng hơn về các chủ đề sau:"
-        
-    elif context == "topic_suggestion":
-        return f"Dưới đây là những chủ đề phù hợp với {audience} từ cơ sở tri thức:"
-        
-    else:  # default
-        return f"Dưới đây là một số chủ đề bạn có thể quan tâm:"
-
-
-def build_kb_context(hits: List[Dict[str, Any]]) -> Tuple[str, str, str]:
-    """Build context from KB hits - returns ctx, sources, best_kb_answer"""
-    ctx_lines: List[str] = []
-    src_lines: List[str] = []
-    best_kb_answer = ""
-    
-    if hits:
-        best_kb_answer = hits[0].get('cau_tra_loi', '')
-        
-    for h in hits[:3]:
-        ctx_lines.append(
-            f"- [{h['ma_so']}] {h['de_muc']} > {h['chu_de_con']} | Q: {h['cau_hoi']} | A: {h['cau_tra_loi']}"
-        )
-        src_lines.append(f"- [{h['ma_so']}] {h['de_muc']} > {h['chu_de_con']}")
-    
-    ctx = "\n".join(ctx_lines)
-    sources = "\n".join(src_lines)
-    
-    return ctx, sources, best_kb_answer
+def get_most_relevant_QA(hits: List[Dict[str, Any]]) -> str:
+    """Return the first Q&A from KB hits that has a non-empty answer"""
+    if not hits:
+        return ""
+    # Find the first hit with a non-empty answer
+    for item in hits:
+        answer = str(item.get('cau_tra_loi', '')).strip()
+        question = str(item.get('cau_hoi', '')).strip()
+        if answer:
+            q_part = f"Q: {question}\n" if question else ""
+            return f"{q_part}A: {answer}".strip()
+    # No answers found
+    return ""
 
 
 def build_history_text(history: List[Dict[str, str]]) -> str:
     """Format conversation history for prompts"""
-    return "\n".join([f"{m.get('role')}: {m.get('content')}" for m in history[-6:]])
-
-
-def classify_input_pattern(query: str) -> Dict[str, str]:
-    """Quick pattern-based classification for common cases"""
-    query_lower = query.lower()
-    
-    # Greeting patterns
-    greeting_patterns = [
-        r'^(hi|hello|chào|xin chào|chào bạn|hey)$',
-        r'^(hi|hello|chào|xin chào|chào bạn|hey)\s*[!.]*$',
-        r'^(tôi|mình)\s+(là|tên)\s+.+$',  # "tôi là..."
-    ]
-    
-    for pattern in greeting_patterns:
-        if re.match(pattern, query_lower):
-            return {"type": "greeting", "confidence": "high"}
-    
-    # Nonsense patterns (very short, no meaning)
-    if len(query) <= 2 and not re.match(r'^[a-zA-Zàáảãạăắằẳẵặâấầẩẫậđèéẻẽẹêếềểễệìíỉĩịòóỏõọôốồổỗộơớờởỡợùúủũụưứừửữựỳýỷỹỵ\s]+$', query):
-        return {"type": "nonsense", "confidence": "high"}
-    
-    # Topic suggestion patterns
-    topic_suggestion_patterns = [
-        r'gợi ý.*?(topic|chủ đề|vấn đề|câu hỏi|nội dung)',
-        r'(liệt kê|cho.*danh sách|danh sách.*gì)',
-        r'có những.*(topic|chủ đề|vấn đề|câu hỏi)',
-        r'(tôi|mình).*(nên hỏi|có thể hỏi).*gì',
-        r'gợi ý.*(vài|một số|mấy)',
-        r'topic.*?(gì|nào|nào hay)',
-    ]
-    
-    for pattern in topic_suggestion_patterns:
-        if re.search(pattern, query_lower):
-            return {"type": "topic_suggestion", "confidence": "high"}
-    
-    # Medical question patterns
-    medical_keywords = [
-        'đau', 'bệnh', 'điều trị', 'thuốc', 'răng', 'nha khoa', 'tiểu đường', 'đái tháo đường',
-        'nội tiết', 'insulin', 'glucose', 'đường huyết', 'viêm', 'sưng', 'nhức', 'chữa',
-        'khám', 'bác sĩ', 'tư vấn', 'triệu chứng', 'chẩn đoán'
-    ]
-    
-    has_medical_keyword = any(keyword in query_lower for keyword in medical_keywords)
-    has_question_word = any(word in query_lower for word in ['sao', 'như thế nào', 'làm thế nào', 'tại sao', 'có nên', 'có thể', '?'])
-    
-    if has_medical_keyword or has_question_word:
-        return {"type": "medical_question", "confidence": "medium"}
-    
-    return {"type": "statement", "confidence": "low"}
+    return "\n".join([f"{m.get('role')}: {m.get('content')}" for m in history[-3:]])
 
 
 def generate_clarifying_questions(query: str, history: List[Dict[str, str]], hits: List[Dict[str, Any]] = None) -> Dict[str, Any]:
     """Generate clarifying questions for generic or low-score queries"""
-    from .prompts import PROMPT_CLARIFYING_QUESTIONS_GENERIC, PROMPT_CLARIFYING_QUESTIONS_LOW_SCORE
+    from .prompts import PROMPT_CLARIFYING_QUESTIONS_GENERIC
     
     history_text = build_history_text(history)
     
+    # Unified handling: always use the generic prompt,
+    # build KB context from hits if available, otherwise provide a placeholder
+    ctx_lines = []
     if hits:
-        # Generic query with KB hits
-        ctx_lines = []
         for h in hits[:5]:
             ctx_lines.append(f"- {h['de_muc']} > {h['chu_de_con']} | Q: {h['cau_hoi']}")
-        kb_ctx = "\n".join(ctx_lines)
-        
-        prompt = PROMPT_CLARIFYING_QUESTIONS_GENERIC.format(
-            query=query, history_text=history_text, kb_ctx=kb_ctx
-        )
-    else:
-        # Low score query without hits
-        prompt = PROMPT_CLARIFYING_QUESTIONS_LOW_SCORE.format(
-            query=query, history_text=history_text
-        )
+    kb_ctx = "\n".join(ctx_lines) if ctx_lines else "(Không có ngữ cảnh KB phù hợp)"
+
+    prompt = PROMPT_CLARIFYING_QUESTIONS_GENERIC.format(
+        query=query, history_text=history_text, kb_ctx=kb_ctx
+    )
     
     try:
         resp = call_llm(prompt)
         data = parse_yaml_response(resp)
         
+        # Handle the new simple response format for low-score queries
+        if "response" in data:
+            return {
+                "final": data["response"],
+                "preformatted": True,
+                "need_clarify": False,
+                "suggestions": [],
+                "context": "low_score_no_info"
+            }
+
         if data and validate_yaml_structure(data, required_fields=["questions"]):
             qs = [q for q in data.get("questions", []) if isinstance(q, str) and q.strip()]
             if len(qs) < 2:
@@ -260,15 +185,12 @@ def generate_clarifying_questions(query: str, history: List[Dict[str, str]], hit
         logger.warning(f"Failed to parse clarifying questions: {e}")
     
     # Fallback
-    lead = "Bạn quan tâm đến nội dung nào?"
     return {
-        "explain": "",
-        "summary": "",
-        "final": lead,
-        "clarify_questions": [],
-        "need_clarify": True,
-        "ask_first_title": lead,
-        "preformatted": False,
+        "final": "Xin lỗi, tôi không thể xử lý yêu cầu của bạn lúc này. Vui lòng thử lại sau.",
+        "preformatted": True,
+        "need_clarify": False,
+        "suggestions": [],
+        "context": "error"
     }
 
 
@@ -276,10 +198,9 @@ def get_context_for_input_type(input_type: str) -> str:
     """Get appropriate context for input type"""
     context_map = {
         "greeting": "greeting",
-        "statement": "statement", 
-        "nonsense": "nonsense"
+        "oos": "oos"
     }
-    return context_map.get(input_type, "statement")
+    return context_map.get(input_type, "oos")
 
 
 def get_context_for_knowledge_case(input_type: str) -> str:
@@ -293,3 +214,34 @@ def get_context_for_knowledge_case(input_type: str) -> str:
 def get_score_threshold() -> float:
     """Get retrieval score threshold for decision making"""
     return 0.15
+
+
+def generate_clarifying_questions_for_topic(topic: str, role: str) -> Dict[str, Any]:
+    """
+    When a user mentions a topic but doesn't ask a specific question,
+    this function generates a response to clarify their intent.
+    """
+    # Retrieve related questions from the knowledge base
+    related_questions, _ = retrieve_random_by_role(topic, top_k=3)
+    
+    intro = f'Mình thấy bạn đang quan tâm đến “{topic}”. Bạn muốn hỏi điều nào?'
+    
+    
+    if related_questions:
+        # Use retrieved questions as suggestions
+        question_list = [q['cau_hoi'] for q in related_questions]
+        formatted_questions = "\n".join([f"{i+1}) “{q}”" for i, q in enumerate(question_list)])
+        final_answer = f"{intro}\n{formatted_questions}"
+        suggestion_questions = question_list
+    else:
+        # Fallback if no related questions are found
+        final_answer = f"{intro}\n(Không tìm thấy câu hỏi gợi ý cụ thể)"
+        suggestion_questions = []
+
+    return {
+        "final": final_answer,
+        "preformatted": True,
+        "need_clarify": True,
+        "suggestion_questions": suggestion_questions,
+        "context": "clarification"
+    }

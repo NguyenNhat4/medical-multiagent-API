@@ -39,6 +39,11 @@ def _normalize_accents(text: str) -> str:
     return unidecode(text.lower())
 
 
+def _collapse_spaces(text: str) -> str:
+    """Collapse multiple spaces into single spaces for robust column matching."""
+    return " ".join(str(text).strip().split())
+
+
 class KnowledgeBaseIndex:
     def __init__(self, kb_dir: str = "medical_knowledge_base") -> None:
         self.kb_dir = kb_dir
@@ -72,14 +77,34 @@ class KnowledgeBaseIndex:
             # Standardize column names by stripping and collapsing spaces
             colmap: Dict[str, str] = {}
             for c in df.columns:
-                key = " ".join(str(c).strip().split())
+                key = _collapse_spaces(c)
                 colmap[c] = key
             df = df.rename(columns=colmap)
 
-            # Ensure required columns exist; if missing, create empty
-            for col in KB_COLUMNS:
-                if col not in df.columns:
-                    df[col] = ""
+            # Ensure required columns exist under BOTH original (possibly multi-space)
+            # and single-space-collapsed variants for downstream compatibility.
+            ensured_cols: Dict[str, str] = {}
+            for original_col in KB_COLUMNS:
+                collapsed_col = _collapse_spaces(original_col)
+
+                # If collapsed exists, prefer its data
+                if collapsed_col in df.columns:
+                    # Mirror into original_col name if missing
+                    if original_col not in df.columns:
+                        df[original_col] = df[collapsed_col]
+                    ensured_cols[original_col] = original_col
+                    continue
+
+                # If original exists (rare at this point), mirror to collapsed
+                if original_col in df.columns:
+                    df[collapsed_col] = df[original_col]
+                    ensured_cols[original_col] = original_col
+                    continue
+
+                # Neither exists – create empty columns for both names
+                df[collapsed_col] = ""
+                df[original_col] = ""
+                ensured_cols[original_col] = original_col
 
             # Keep only known columns
             df = df[KB_COLUMNS]
@@ -150,7 +175,7 @@ class KnowledgeBaseIndex:
         hits = self.search(query, top_k=1)
         return hits[0]["score"] if hits else 0.0
 
-    def get_random_by_role(self, role: str, count: int = 5) -> List[Dict[str, Any]]:
+    def get_random_by_role(self, role: str, amount: int = 5) -> List[Dict[str, Any]]:
         """Get random entries from CSV file based on user role"""
         
         # Find the appropriate CSV file for this role
@@ -166,14 +191,14 @@ class KnowledgeBaseIndex:
             # Fallback to random from all data if no specific file found
             if len(self.df) == 0:
                 return []
-            sample_size = min(count, len(self.df))
+            sample_size = min(amount, len(self.df))
             sampled_df = self.df.sample(n=sample_size)
         else:
             # Get random entries from role-specific CSV
             role_df = self.role_dataframes[csv_file]
             if len(role_df) == 0:
                 return []
-            sample_size = min(count, len(role_df))
+            sample_size = min(amount, len(role_df))
             sampled_df = role_df.sample(n=sample_size)
         
         results: List[Dict[str, Any]] = []
@@ -207,9 +232,9 @@ def retrieve(query: str, top_k: int = 5) -> Tuple[List[Dict[str, Any]], float]:
     return results, score
 
 
-def retrieve_random_by_role(role: str, count: int = 5) -> List[Dict[str, Any]]:
+def retrieve_random_by_role(role: str, amount: int = 5) -> List[Dict[str, Any]]:
     """Retrieve random entries from KB based on user role"""
     kb = get_kb()
-    return kb.get_random_by_role(role, count)
+    return kb.get_random_by_role(role, amount)
 
 

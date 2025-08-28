@@ -2,89 +2,150 @@
 Prompts for medical agent nodes
 """
 
+
 PROMPT_CLASSIFY_INPUT = """
-Phân loại câu sau của user trong ứng dụng tư vấn y khoa:
+Bạn là chuyên gia tạo keywords từ input người dùng phục vụ cho RAG và phân loại input đó cho ứng dụng tư vấn y khoa, đặc biệt về vấn đề nội tiết và nha khoa.
+
+Nhiệm vụ:
+1. Phân loại câu input của người dùng thành đúng 1 trong 3 loại sau:
+   - greeting: chào hỏi, xã giao (vd: "hi", "chào bác sĩ", "hihi")
+   - medical_question: câu hỏi rõ ràng liên quan đến y khoa, sức khỏe, bệnh, điều trị, lưu ý là nó phải ví dụ : input="ê" -> không phải
+   - topic_suggestion: yêu cầu gợi ý chủ đề, danh sách tham khảo, hoặc ý định chưa rõ,ngoài phạm vi y khoa, spam, vô nghĩa, khẳng định không liên quan
+
+2. Tạo keywords từ input dựa trên nội dung và vai trò người dùng (role context). 
+   - Nếu input người dùng không rõ nghĩa hoặc ý định hoặc không phải là medical_question thì có thể để trống
+   - Nếu có keywords, phải có ít nhất 3 từ khóa
+   - Từ khóa phải liên quan đến y khoa, sức khỏe, bệnh, điều trị
 
 Input: "{query}"
 Role context: {role}
 
-Phân loại thành một trong các loại sau:
-1. greeting - chào hỏi, giới thiệu
-2. medical_question - câu hỏi y khoa, sức khỏe cụ thể
-3. topic_suggestion - yêu cầu gợi ý topic, chủ đề, danh sách câu hỏi
-4. statement - câu khẳng định, chia sẻ thông tin
-5. nonsense - không có nghĩa, spam
+**QUAN TRỌNG: Trả về CHÍNH XÁC định dạng YAML dưới đây. KHÔNG thêm text nào khác ngoài YAML.**
 
-Trả lời đúng format YAML sau:
+- `confidence`: high nếu chắc chắn, medium nếu có chút nhầm lẫn, low nếu mơ hồ
+- `reason`: giải thích ngắn gọn bằng tiếng Việt đơn giản, KHÔNG dùng quotes
+- `keywords`: list các từ khóa, nếu không có thì để trống list
+
+**Ví dụ format đúng:**
+
 ```yaml
-type: <loại>
-confidence: <high/medium/low>
-reason: <lý do ngắn gọn>
+type: greeting
+confidence: high
+reason: Đây là lời chào hỏi thông thường
+keywords: []
+```
+
+```yaml
+type: medical_question
+confidence: high
+reason: Câu hỏi về triệu chứng bệnh cụ thể
+keywords:
+  - đau răng
+  - viêm nướu
+  - chảy máu chân răng
+```
+
+**Output của bạn (chỉ YAML, không text khác):**
+
+```yaml
+type: <greeting|medical_question|topic_suggestion>
+confidence: <high|medium|low>
+reason: <lý do ngắn gọn bằng tiếng Việt, không dùng quotes>
+keywords:
+  - <từ khóa 1>
+  - <từ khóa 2>
+  - <từ khóa 3>
 ```"""
+
 
 PROMPT_CLARIFYING_QUESTIONS_GENERIC = """
 Bạn là trợ lý y khoa. Người dùng đang hỏi khá chung: '{query}'.
 Dưới đây là bối cảnh hội thoại gần đây:
 {history_text}
 
-Và một số câu hỏi liên quan trong cơ sở tri thức:
+Và danh sách các câu hỏi chủ đề tham khảo trong cơ sở tri thức:
 {kb_ctx}
 
-Hãy đề xuất 3-5 câu hỏi gợi ý CỤ THỂ, tự nhiên, không trùng lặp, giúp thu hẹp phạm vi.
-Xuất kết quả ở YAML:
+Nhiệm vụ:
+- Chỉ chọn và trích xuất lại 3–5 câu hỏi từ cơ sở tri thức ở trên.
+- Các câu hỏi được chọn phải không trùng lặp, và chọn ra liên quan nhất đến input của người dùng.
+- KHÔNG tự sáng tạo thêm câu hỏi mới ngoài những gì có trong cơ sở tri thức.
+
+**QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
 ```yaml
 lead: |
-  Câu hỏi của bạn đang khá rộng. Mình gợi ý một số nội dung để bạn chọn:
+  Bạn quan tâm về điều gì? Mình gợi ý một số nội dung liên quan để bạn chọn
 questions:
-  - ...
-  - ...
+  - <câu hỏi 1>
+  - <câu hỏi 2>
+  - <câu hỏi 3>
 ```"""
+
 
 PROMPT_CLARIFYING_QUESTIONS_LOW_SCORE = """
 Bạn là trợ lý y khoa. Người dùng hỏi: '{query}'.
 Bối cảnh gần đây:
 {history_text}
 
-Hãy đưa 3-5 câu hỏi gợi ý cần thiết để làm rõ và thu hẹp phạm vi.
-Hãy ưu tiên các khía cạnh an toàn và thông tin lâm sàng thiết yếu.
-Xuất kết quả ở YAML:
+Thông tin này không có trong cơ sở tri thức. Hãy trả lời ngắn gọn rằng bạn
+không có thông tin về chủ đề này và mời họ hỏi về một chủ đề khác liên quan đến chuyên môn.
+
+**QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
 ```yaml
-lead: |
-  Câu hỏi của bạn đang khá chung. Bạn quan tâm đến nội dung nào?
-questions:
-  - ...
-  - ...
+response: "Xin lỗi, tôi không có thông tin về chủ đề này. Bạn có thể vui lòng hỏi một câu khác được không?"
 ```"""
 
 PROMPT_COMPOSE_ANSWER = """
-Bạn là người cung cấp tri thức y khoa dựa trên cơ sở dữ liệu (không tư vấn điều trị cá nhân).
-Đối tượng: {audience}. Giọng điệu: {tone}.
-Phong cách viết: tự nhiên, chuyên nghiệp, mạch lạc, câu dài-ngắn xen kẽ; tránh lặp từ;
-không sử dụng các cụm như 'theo tri thức' hay 'ngữ cảnh' trong câu trả lời;
-không đặt dấu ngoặc kép quanh câu hỏi gợi ý.
+Bạn là {ai_role} cung cấp tri thức y khoa dựa trên cơ sở tri thức do bác sĩ biên soạn (không tư vấn điều trị cá nhân).
+Đối tượng người dùng: {audience}. Giọng điệu: {tone}.
 Nếu câu hỏi đòi chẩn đoán/điều trị cụ thể, hãy khuyến khích người dùng hỏi bác sĩ điều trị.
+Tuyệt đối KHÔNG đề cập bạn là AI/chatbot hay nói tới "cơ sở dữ liệu".
 
-Câu hỏi: {query}
+Ngữ cảnh hội thoại trước đó:
+{conversation_history}
 
-Tư liệu trích từ cơ sở tri thức:
-{ctx}
+Input hiện tại của người dùng:
+{query}
 
-Câu trả lời trực tiếp từ cơ sở tri thức (để sử dụng cho tóm tắt): {best_kb_answer}
+Danh sách Q&A đã retrieve (có thể không đầy đủ). Đầu vào này nên là danh sách các mục với tối thiểu 2 trường:
+- question: <string>
+- answer: <string>
+- (tuỳ chọn) score: <0..1>
+Danh sách Q&A:
+{relevant_info_from_kb}
 
-Xuất kết quả bằng tiếng Việt, định dạng Markdown, theo cấu trúc sau:
-### Diễn giải
-- Viết liền mạch, bám sát nội dung tư liệu.
+NHIỆM VỤ
+1) Chọn 1 cặp {{best_question, best_answer}} liên quan nhất tới input người dùng từ danh sách trên.
+ 
+2) Soạn `explanation` gồm 2 phần:
+   - Phần 1: Diễn giải giải thích best_question (có gắng độ dài < 3 lần độ dài best_answer, ngắn gọn càng tốt , ngôn từ phù hợp với người dùng) dựa đúng vào {{best_answer}}, không suy đoán ngoài tư liệu.
+   - Xuống dòng, ghi: 👉 Tóm lại, <viết lại càng giống  {{best_answer}} càng tốt>.
+   (Ví dụ: nếu best_answer = "Có. Dù phổ biến ở người trưởng thành, tỷ lệ mắc ở thanh thiếu niên đang gia tăng..."
+    thì dòng tóm lại có thể: "👉 Tóm lại có, tỷ lệ ở thanh thiếu niên đang tăng do béo phì, ít vận động, ăn uống chưa hợp lý." ) ( phần tóm lại này phải dựa vào input người để coi có phù hợp không, nếu không thì không cần viết)
+3) Soạn `questions`: viết lại các câu hỏi  LIÊN QUAN, không trùng {{best_question}}, rút từ các mục còn lại trong danh sách đã retrieve.
+.
+4) Trường hợp KHÔNG có mục nào đủ liên quan (hoặc danh sách trống):
+   - `explanation` = "Mình chưa đủ thông tin từ tư liệu hiện có để trả lời chính xác cho câu hỏi này. Bạn có thể đặt câu hỏi khác không." 
+   - `questions` = "có thể để rỗng").
 
-### Tóm tắt
-👉Tóm lại là {best_kb_summary}
+YÊU CẦU PHONG CÁCH & AN TOÀN
+- Viết tiếng Việt tự nhiên, phù hợp {audience}, giữ giọng {tone}.
+- Không đưa lời khuyên điều trị cá nhân; nếu người dùng đòi hỏi điều trị, nhắc họ hỏi bác sĩ điều trị.
+- Không thêm nguồn, link, hoặc meta chú thích.
+- Không tiết lộ quá trình chọn lọc hay nhắc tới "score", "vector", "RAG".
 
-### Gợi ý câu hỏi
-- 2–3 câu hỏi liên quan (ưu tiên lấy trực tiếp từ tư liệu hoặc để làm rõ).
+**QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
-### Nguồn tri thức
-{kb_sources}"""
+```yaml
+explanation: | <string>
+
+suggestion_questions:
+  - <câu hỏi gợi ý 1>
+  - <câu hỏi gợi ý 2>
+  - <câu hỏi gợi ý 3>
+```"""
 
 PROMPT_SUGGEST_FOLLOWUPS = """
 Dựa trên câu hỏi ban đầu: '{query}', câu trả lời:'''{answer_text}''',
@@ -95,7 +156,8 @@ và các mục liên quan truy xuất bằng vector từ cơ sở tri thức:
 {kb_ctx}
 
 Hãy đề xuất 2-3 câu hỏi tiếp theo ngắn gọn, hữu ích để người dùng đào sâu.
-Xuất YAML:
+
+**QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
 ```yaml
 questions:
