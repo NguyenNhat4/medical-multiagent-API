@@ -130,6 +130,44 @@ def get_most_relevant_QA(hits: List[Dict[str, Any]]) -> str:
     return ""
 
 
+def format_kb_qa_list(hits: List[Dict[str, Any]], max_items: int = 5) -> str:
+    """Format multiple KB hits as a readable Q&A list for prompting.
+
+    Each entry is rendered as:
+    Q: <question>
+    A: <answer>
+    (score: <0..1>)  # optional if score exists
+
+    Entries are separated by a blank line. Only items with non-empty answers are included.
+    """
+    if not hits:
+        return ""
+
+    lines: List[str] = []
+    added = 0
+    for item in hits:
+        answer = str(item.get("cau_tra_loi", "")).strip()
+        question = str(item.get("cau_hoi", "")).strip()
+        if not answer:
+            continue
+        if question:
+            lines.append(f"Q: {question}")
+        else:
+            lines.append("Q: (không có tiêu đề)")
+        lines.append(f"A: {answer}")
+        score = item.get("score")
+        if isinstance(score, (int, float)):
+            try:
+                lines.append(f"(score: {float(score):.3f})")
+            except Exception:
+                pass
+        lines.append("")  # separator
+        added += 1
+        if added >= max_items:
+            break
+
+    return "\n".join(lines).strip()
+
 def get_context_for_input_type(input_type: str) -> str:
     """Get appropriate context for input type"""
     context_map = {

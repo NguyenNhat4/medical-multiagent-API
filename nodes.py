@@ -16,6 +16,7 @@ from utils.helpers import (
     get_topics_by_role,
     get_fallback_topics_by_role,
     get_most_relevant_QA,
+    format_kb_qa_list,
     get_context_for_input_type,
     get_context_for_knowledge_case,
     get_score_threshold,
@@ -185,7 +186,8 @@ class ComposeAnswer(Node):
         role, query, retrieved,  score, conversation_history = inputs
         persona = get_persona_for(role)
 
-        relevant_info_from_kb = get_most_relevant_QA(retrieved)
+        # Provide a list of Q&A instead of a single item so the LLM can pick the best
+        relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=10)
         prompt = PROMPT_COMPOSE_ANSWER.format(
             ai_role=persona['persona'],
             audience=persona['audience'],
