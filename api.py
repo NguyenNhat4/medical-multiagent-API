@@ -376,46 +376,30 @@ async def chat(
             "role": role_name,
             "input": request.message,
             "query": "",
-            "answer": "",
-            "history": [],  # TODO: Implement session-based history
+            "explain": "",
+            "conversation_history": thread.messages,
             "session_id": request.session_id,
         }
 
-        # Run the medical flow
         med_flow.run(shared)
-
-        # Extract results
-        raw_response = shared.get("answer", "Xin lỗi, tôi không thể trả lời lúc này.")
-        raw_suggestions = shared.get("suggestions", [])
+        
+        explanation = shared.get("explain")
+        if not explanation or not isinstance(explanation, str) or not explanation.strip():
+            explanation = "Xin lỗi, tôi không thể trả lời lúc này. Vui lòng thử lại hoặc đặt câu hỏi cụ thể hơn."
+        suggestion_questions = shared.get("suggestion_questions", [])
         input_type = shared.get("input_type")
         need_clarify = shared.get("need_clarify", False)
+        logger.info(f"✅ Flow completed - explanation: {explanation}, Need clarify: {need_clarify}")
 
-        # Parse response based on input type
-        if input_type == "greeting":
-            explanation, summary, question_suggestions = handle_greeting_response(
-                raw_response
-            )
-        elif input_type == "statement":
-            explanation, summary, question_suggestions = handle_statement_response(
-                raw_response, raw_suggestions
-            )
-        else:
-            # Medical question or other types
-            explanation, summary, question_suggestions = parse_medical_response(
-                raw_response, raw_suggestions
-            )
-
-        # Create structured response
         response = ConversationResponse(
             explanation=explanation,
-            summary=summary,
-            questionSuggestion=question_suggestions,
+            questionSuggestion=suggestion_questions,
             session_id=request.session_id,
             timestamp=datetime.now().isoformat(),
             input_type=input_type,
-            need_clarify=need_clarify,
+            need_clarify=need_clarify
         )
-
+        
         # Store bot message in database
         bot_message = ChatMessage(
             id=str(uuid.uuid4()),
@@ -423,8 +407,8 @@ async def chat(
             role="bot",
             content=explanation,
             timestamp=datetime.now(),
-            suggestions=question_suggestions,
-            summary=summary,
+            suggestions=suggestion_questions,
+            summary=explanation,
             need_clarify=need_clarify,
             input_type=input_type
         )
