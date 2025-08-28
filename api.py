@@ -3,10 +3,11 @@ FastAPI server for Medical Conversation System
 Exposes the PocketFlow medical agent as REST API endpoints
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Header
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends, Header, status
 from fastapi import APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, EmailStr
 from passlib.hash import bcrypt
 from sqlalchemy.orm import Session
@@ -50,6 +51,12 @@ app = FastAPI(
     docs_url="/api/docs",
     openapi_url="/api/openapi.json",
     redoc_url="/redoc",
+    swagger_ui_oauth2_redirect_url="/api/docs/oauth2-redirect",
+    swagger_ui_init_oauth={
+        "usePkceWithAuthorizationCodeGrant": True,
+        "clientId": "",
+        "clientSecret": "",
+    }
 )
 
 # Add CORS middleware
@@ -214,7 +221,8 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     return UserOut(id=user.id, email=user.email)
 
 
-from utils.auth import create_access_token
+from utils.auth import create_access_token, Token
+from fastapi.security import OAuth2PasswordRequestForm
 
 @router.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginReq, db: Session = Depends(get_db)):
@@ -231,6 +239,28 @@ def login(body: LoginReq, db: Session = Depends(get_db)):
         token_type="bearer",
         user=UserOut(id=user.id, email=user.email)
     )
+
+@router.post("/auth/token", response_model=Token)
+async def login_for_access_token(
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db)
+):
+    """
+    OAuth2 compatible token login, get an access token for future requests
+    This endpoint is used by Swagger UI for authorization
+    """
+    user = db.query(Users).filter(Users.email == form_data.username).first()
+    if not user or not bcrypt.verify(form_data.password, user.password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Incorrect email or password",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    
+    token_data = {"sub": str(user.id)}
+    access_token = create_access_token(token_data)
+    
+    return {"access_token": access_token, "token_type": "bearer"}
 
 
 @router.get("/users", response_model=List[UserOut])
