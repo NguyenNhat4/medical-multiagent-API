@@ -168,7 +168,7 @@ class GreetingResponse(Node):
         return {"context_set": True, "role": role, "query": query}
     
     def post(self, shared, prep_res, exec_res):
-        shared["explain"] = "Chào bạn! Tôi là AI nha khoa. Nếu bạn có câu hỏi hoặc cần gợi ý các câu hỏi liên quan đến nha khoa và sức khỏe răng miệng hoặc đái tháo đường, thì cứ nói tôi nhé 😊"
+        shared["explain"] = "Xin chào 😊! Tôi là trợ lý AI của bạn. Rất vui được hỗ trợ bạn - Bạn cần tôi giúp gì hôm nay? "
         return "default"
 
 
@@ -245,7 +245,7 @@ class TopicSuggestResponse(Node):
         # Handle low-score medical questions specifically
         if context == "medical_low_score":
             logger.info(f"[TopicSuggestResponse] EXEC - Handling low-score medical query: '{query}'")
-            result["explain"] = "Hiện mình chưa tìm được câu trả lời trong dữ sẵn có. Bạn thông cảm nhé!. Mình có các hướng sau bạn có thể quan tâm nè."
+            result["explain"] = "Hiện mình chưa tìm được câu trả lời trong dữ sẵn có. Bạn thông cảm nhé!. Mình có các hướng sau bạn có thể quan tâm."
         
         if context == "topic_suggestion":
             result["explain"] = "Mình gợi ý bạn các chủ đề sau nhé"
