@@ -107,7 +107,7 @@ def create_thread(
         id=str(uuid.uuid4()),
         thread_id=thread_id,
         role="bot",
-        content="Xin chào! Tôi là phụ tá AI thông minh của bạn đây. Xem tôi có thể giúp gì được nào?",
+        content="Xin chào! Tôi là trợ lý AI của bạn. Rất vui được hỗ trợ bạn - Bạn cần tôi giúp gì hôm nay?",
         timestamp=datetime.now(),
     )
     
