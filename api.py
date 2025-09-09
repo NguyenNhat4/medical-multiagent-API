@@ -19,7 +19,6 @@ from datetime import datetime
 import uvicorn
 import os
 import uuid
-
 from dotenv import load_dotenv
 
 # Import chat routes
@@ -33,6 +32,7 @@ from utils.response_parser import (
     handle_greeting_response,
     handle_statement_response,
 )
+from utils.helpers import serialize_conversation_history
 
 # Load environment variables
 load_dotenv()
@@ -401,16 +401,19 @@ async def chat(
         db.add(user_message)
         db.commit()
 
+        # Serialize conversation history for the flow
+        conversation_history = serialize_conversation_history(thread.messages)
+
         # Prepare shared data for the flow
         shared = {
             "role": role_name,
             "input": request.message.strip(),
             "query": "",
             "explain": "",
-            "conversation_history": thread.messages,
+            "conversation_history": conversation_history,
             "session_id": request.session_id,
         }
-
+        # run chat flow  -> updating shared store
         med_flow.run(shared)
         
         explanation = shared.get("explain")

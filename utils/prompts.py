@@ -22,6 +22,10 @@ Role context: {role}
 
 **QUAN TRỌNG: Trả về CHÍNH XÁC định dạng YAML dưới đây. KHÔNG thêm text nào khác ngoài YAML.**
 
+**LƯU Ý VỀ THỤT LỀ:**
+- Chỉ trả về duy nhất một code block, bắt đầu bằng ```yaml và kết thúc bằng ```.
+- Các dòng trong `keywords` phải thụt 2 spaces sau dấu `-`.
+
 - `confidence`: high nếu chắc chắn, medium nếu có chút nhầm lẫn, low nếu mơ hồ
 - `reason`: giải thích ngắn gọn bằng tiếng Việt đơn giản, KHÔNG dùng quotes
 - `keywords`: list các từ khóa, nếu không có thì để trống list
@@ -73,6 +77,10 @@ Nhiệm vụ:
 
 **QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
+**LƯU Ý VỀ THỤT LỀ:**
+- Sau dòng `lead: |`, tất cả các dòng tiếp theo phải thụt 2 spaces cho đến khi kết thúc phần `lead`.
+- Chỉ trả về duy nhất một code block, bắt đầu bằng ```yaml và kết thúc bằng ```.
+
 ```yaml
 lead: |
   Bạn quan tâm về điều gì? Mình gợi ý một số nội dung liên quan để bạn chọn
@@ -109,34 +117,54 @@ Ngữ cảnh hội thoại trước đó:
 Input hiện tại của người dùng:
 {query}
 
-Danh sách Q&A đã retrieve (có thể không đầy đủ). Đầu vào này nên là danh sách các mục với tối thiểu 2 trường:
+Danh sách Q&A đã retrieve:
 {relevant_info_from_kb}
 
 NHIỆM VỤ
 1) Chọn 1 cặp {{best_question, best_answer}} liên quan nhất tới input người dùng từ danh sách trên.
  
-2) Soạn `explanation` gồm 2 phần:
-   - Phần 1: Diễn giải giải thích best_question (có gắng độ dài < 3 lần độ dài best_answer, ngắn gọn càng tốt , ngôn từ phù hợp với người dùng, nhấn mạnh từ quan trọng ví dụ: **<từ quan trọng>**) dựa đúng vào {{best_answer}}, không suy đoán ngoài tư liệu.
-   - Xuống dòng, ghi: 👉 Tóm lại, <viết lại càng giống  {{best_answer}} càng tốt>.
-   (Ví dụ: nếu best_answer = "Có. Dù phổ biến ở người trưởng thành, tỷ lệ mắc ở thanh thiếu niên đang gia tăng..."
-    thì dòng tóm lại có thể: "👉 Tóm lại có, tỷ lệ ở thanh thiếu niên đang tăng do béo phì, ít vận động, ăn uống chưa hợp lý." ) ( phần tóm lại này phải dựa vào input người để coi có phù hợp không, nếu không thì không cần viết)
+2) Soạn `explanation` ngắn gọn, trực tiếp:
+   - **KHÔNG chào hỏi**, đi thẳng vào vấn đề
+   - Giải thích dựa vào {{best_answer}}, nhấn mạnh từ quan trọng: **<từ quan trọng>**
+   - Độ dài tối đa 2-3 câu ngắn, ngôn từ phù hợp {audience}
+   - Xuống dòng, ghi: 👉 Tóm lại, <viết lại ngắn gọn dựa vào {{best_answer}}>
+   - Chỉ viết phần tóm lại nếu phù hợp với input người dùng
 3) Soạn `questions`: viết lại các câu hỏi  LIÊN QUAN, không trùng {{best_question}}, rút từ các mục còn lại trong danh sách đã retrieve.
-.
+
 4) Trường hợp KHÔNG có mục nào đủ liên quan (hoặc danh sách trống):
    - `explanation` = "Mình chưa đủ thông tin từ tư liệu hiện có để trả lời chính xác cho câu hỏi này. Bạn có thể đặt câu hỏi khác không." 
    - `questions` = "có thể để rỗng").
 
 YÊU CẦU PHONG CÁCH & AN TOÀN
-- Viết tiếng Việt tự nhiên, phù hợp {audience}, giữ giọng {tone}.
-- Không đưa lời khuyên điều trị cá nhân; nếu người dùng đòi hỏi điều trị, nhắc họ hỏi bác sĩ điều trị.
-- Không thêm nguồn, link, hoặc meta chú thích.
-- Không tiết lộ quá trình chọn lọc hay nhắc tới "score", "vector", "RAG".
+- **KHÔNG chào hỏi** (như "Chào bạn", "Bạn hỏi về..."), đi thẳng vào câu trả lời
+- Viết tiếng Việt tự nhiên, ngắn gọn, phù hợp {audience}, giữ giọng {tone}
+- Không đưa lời khuyên điều trị cá nhân; nếu người dùng đòi hỏi điều trị, nhắc họ hỏi bác sĩ điều trị
+- Không thêm nguồn, link, hoặc meta chú thích
+- Không tiết lộ quá trình chọn lọc hay nhắc tới "score", "vector", "RAG"
 
 **QUAN TRỌNG: Trả lời CHÍNH XÁC theo định dạng YAML bên dưới. KHÔNG thêm text nào khác ngoài YAML. Đảm bảo YAML hợp lệ và có thể parse được.**
 
-```yaml
-explanation: | <string>
+**LƯU Ý VỀ THỤT LỀ:**
+- Sau dòng `explanation: |`, tất cả các dòng tiếp theo phải thụt 2 spaces cho đến khi kết thúc phần `explanation`.
+- Không được có dấu `:` hoặc `-` trong nội dung `explanation` trừ khi thụt lề đúng.
+- Chỉ trả về duy nhất một code block, bắt đầu bằng ```yaml và kết thúc bằng ```.
 
+**Ví dụ đúng:**
+```yaml
+explanation: |
+  Đây là phần giải thích chi tiết về vấn đề.
+  Có thể có nhiều dòng nhưng phải thụt 2 spaces.
+  👉 Tóm lại, đây là kết luận ngắn gọn.
+suggestion_questions:
+  - <câu hỏi gợi ý 1>
+  - <câu hỏi gợi ý 2>
+  - <câu hỏi gợi ý 3>
+```
+
+**Output của bạn (chỉ YAML, không text khác):**
+```yaml
+explanation: |
+  <nội dung giải thích, mỗi dòng thụt 2 spaces>
 suggestion_questions:
   - <câu hỏi gợi ý 1>
   - <câu hỏi gợi ý 2>

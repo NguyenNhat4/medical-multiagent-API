@@ -219,3 +219,23 @@ def generate_clarifying_questions_for_topic(topic: str, role: str) -> Dict[str, 
         "suggestion_questions": suggestion_questions,
         "context": "clarification"
     }
+
+def serialize_conversation_history(messages):
+    """
+    Serialize SQLAlchemy message objects to plain Python dicts
+    
+    Args:
+        messages: SQLAlchemy relationship collection of ChatMessage objects
+        
+    Returns:
+        list: List of serialized message dictionaries
+    """
+    conversation_history = []
+    for msg in messages:
+        conversation_history.append({
+            "role": msg.role,
+            "content": msg.content,
+            "api_role": msg.api_role,
+            "input_type": msg.input_type
+        })
+    return conversation_history
