@@ -150,6 +150,43 @@ class DeleteUserResponse(BaseModel):
     timestamp: str
 
 
+class ConversationThreadInfo(BaseModel):
+    thread_id: str = Field(..., description="Thread/session identifier")
+    name: str = Field(..., description="Thread name")
+    preview: str = Field(..., description="Preview of first message (truncated)")
+    message_count: int = Field(..., description="Total number of messages in thread")
+    created_at: str = Field(..., description="Thread creation timestamp")
+    updated_at: str = Field(..., description="Thread last update timestamp")
+    last_activity: str = Field(..., description="Last message timestamp")
+
+
+class ConversationHistoryResponse(BaseModel):
+    conversations: List[ConversationThreadInfo] = Field(..., description="List of conversation threads")
+    total: int = Field(..., description="Total number of conversations")
+    user_id: int = Field(..., description="User ID")
+
+
+class MessageInfo(BaseModel):
+    id: str = Field(..., description="Message ID")
+    role: str = Field(..., description="Message role (user/bot)")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(..., description="Message timestamp")
+    api_role: Optional[str] = Field(None, description="API role used for user messages")
+    suggestions: Optional[List[str]] = Field(None, description="Bot message suggestions")
+    need_clarify: Optional[bool] = Field(None, description="Whether response needs clarification")
+    input_type: Optional[str] = Field(None, description="Classified input type")
+
+
+class ThreadMessagesResponse(BaseModel):
+    thread_id: str = Field(..., description="Thread identifier")
+    thread_name: str = Field(..., description="Thread name")
+    messages: List[MessageInfo] = Field(..., description="List of messages in chronological order")
+    total_messages: int = Field(..., description="Total number of messages")
+    user_id: int = Field(..., description="User ID")
+    created_at: str = Field(..., description="Thread creation timestamp")
+    updated_at: str = Field(..., description="Thread last update timestamp")
+
+
 # API Endpoints
 
 
@@ -186,7 +223,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     return UserOut(id=user.id, email=user.email)
 
 
-from utils.auth import create_access_token, Token
+from utils.auth import create_access_token, Token, get_current_user
 from fastapi.security import OAuth2PasswordRequestForm
 
 @router.post("/auth/login", response_model=TokenResponse)
@@ -243,6 +280,17 @@ def get_all_users(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)
     return [UserOut(id=user.id, email=user.email) for user in users]
 
 
+@router.get("/users/me", response_model=UserOut)
+def get_current_user_info(current_user = Depends(get_current_user)):
+    """
+    Get current user information
+    
+    Returns the profile information of the currently authenticated user.
+    Requires valid JWT token in Authorization header.
+    """
+    return UserOut(id=current_user.id, email=current_user.email)
+
+
 @router.delete("/users/{user_id}", response_model=DeleteUserResponse)
 def delete_user(user_id: int, db: Session = Depends(get_db)):
     """
@@ -294,9 +342,6 @@ async def get_available_roles():
     except Exception as e:
         logger.error(f"❌ Error getting roles: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Error retrieving roles: {str(e)}")
-
-
-from utils.auth import get_current_user
 
 
 @router.post("/chat", response_model=ConversationResponse)
@@ -426,55 +471,161 @@ async def chat(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-@router.get("/conversation-history")
-async def get_conversation_history(limit: int = 5):
+@router.get("/conversation-history", response_model=ConversationHistoryResponse)
+async def get_conversation_history(
+    limit: int = 50, 
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
     """
-    Get recent conversation history from log file
-
-    - **limit**: Number of recent exchanges to return (default: 50)
+    Get user's conversation threads for chat history sidebar
+    
+    - **limit**: Number of recent threads to return (default: 50)
+    
+    Returns a list of conversation threads with summary information for displaying
+    in a chat history sidebar. Each thread includes the first user message as preview.
+    Requires authentication via JWT token.
     """
     try:
-        # Read conversation log
-        if not os.path.exists("conversation.log"):
-            return {"exchanges": [], "total": 0}
+        # Get user's threads ordered by most recent activity
+        threads = db.query(ChatThread).filter(
+            ChatThread.user_id == current_user.id
+        ).order_by(ChatThread.updated_at.desc()).limit(limit).all()
+        
+        if not threads:
+            return {
+                "conversations": [],
+                "total": 0,
+                "user_id": current_user.id
+            }
+        
+        conversations = []
+        for thread in threads:
+            # Get the first user message as preview
+            first_message = db.query(ChatMessage).filter(
+                ChatMessage.thread_id == thread.id,
+                ChatMessage.role == "user"
+            ).order_by(ChatMessage.timestamp.asc()).first()
+            
+            # Get total message count for this thread
+            message_count = db.query(ChatMessage).filter(
+                ChatMessage.thread_id == thread.id
+            ).count()
+            
+            # Get the last message timestamp
+            last_message = db.query(ChatMessage).filter(
+                ChatMessage.thread_id == thread.id
+            ).order_by(ChatMessage.timestamp.desc()).first()
+            
+            conversation_info = {
+                "thread_id": thread.id,
+                "name": thread.name,
+                "preview": first_message.content[:100] + "..." if first_message and len(first_message.content) > 100 else (first_message.content if first_message else "New conversation"),
+                "message_count": message_count,
+                "created_at": thread.created_at.isoformat(),
+                "updated_at": thread.updated_at.isoformat(),
+                "last_activity": last_message.timestamp.isoformat() if last_message else thread.updated_at.isoformat()
+            }
+            conversations.append(conversation_info)
 
-        with open("conversation.log", "r", encoding="utf-8") as f:
-            lines = f.readlines()
-
-        # Parse exchanges
-        exchanges = []
-        current_exchange = {}
-
-        for line in lines:
-            line = line.strip()
-            if line.startswith("user:"):
-                if current_exchange:
-                    exchanges.append(current_exchange)
-                current_exchange = {"user": line[5:].strip()}
-            elif line.startswith("bot:"):
-                if "user" in current_exchange:
-                    current_exchange["bot"] = line[4:].strip()
-            elif line == "" and current_exchange:
-                exchanges.append(current_exchange)
-                current_exchange = {}
-
-        # Add last exchange if exists
-        if current_exchange:
-            exchanges.append(current_exchange)
-
-        # Return recent exchanges
-        recent_exchanges = exchanges[-limit:] if len(exchanges) > limit else exchanges
-
-        return {
-            "exchanges": recent_exchanges,
-            "total": len(exchanges),
-            "showing": len(recent_exchanges),
-        }
+        return ConversationHistoryResponse(
+            conversations=conversations,
+            total=len(conversations),
+            user_id=current_user.id
+        )
 
     except Exception as e:
         logger.error(f"❌ Error reading conversation history: {str(e)}")
         raise HTTPException(
             status_code=500, detail=f"Error reading conversation history: {str(e)}"
+        )
+
+
+@router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
+async def get_thread_messages(
+    thread_id: str,
+    page: int = 1,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Get all messages for a specific conversation thread
+    
+    - **thread_id**: The thread/session identifier
+    - **page**: Page number for pagination (default: 1)
+    - **limit**: Number of messages per page (default: 50, max: 200)
+    
+    Returns all messages in chronological order for the specified thread.
+    Only accessible by the thread owner. Perfect for loading full conversation
+    when user clicks on a thread from the sidebar.
+    Requires authentication via JWT token.
+    """
+    try:
+        # Validate limit
+        if limit > 200:
+            limit = 200
+        if limit < 1:
+            limit = 1
+        if page < 1:
+            page = 1
+            
+        # Verify thread exists and belongs to current user
+        thread = db.query(ChatThread).filter(
+            ChatThread.id == thread_id,
+            ChatThread.user_id == current_user.id
+        ).first()
+        
+        if not thread:
+            raise HTTPException(
+                status_code=404,
+                detail="Thread not found or you don't have permission to access it"
+            )
+        
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total message count
+        total_messages = db.query(ChatMessage).filter(
+            ChatMessage.thread_id == thread_id
+        ).count()
+        
+        # Get messages for this thread with pagination
+        messages = db.query(ChatMessage).filter(
+            ChatMessage.thread_id == thread_id
+        ).order_by(ChatMessage.timestamp.asc()).offset(offset).limit(limit).all()
+        
+        # Format messages
+        formatted_messages = []
+        for message in messages:
+            message_info = MessageInfo(
+                id=message.id,
+                role=message.role,
+                content=message.content,
+                timestamp=message.timestamp.isoformat(),
+                api_role=message.api_role,
+                suggestions=message.suggestions,
+                need_clarify=message.need_clarify,
+                input_type=message.input_type
+            )
+            formatted_messages.append(message_info)
+        
+        return ThreadMessagesResponse(
+            thread_id=thread.id,
+            thread_name=thread.name,
+            messages=formatted_messages,
+            total_messages=total_messages,
+            user_id=current_user.id,
+            created_at=thread.created_at.isoformat(),
+            updated_at=thread.updated_at.isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error getting thread messages: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving thread messages: {str(e)}"
         )
 
 
