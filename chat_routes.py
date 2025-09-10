@@ -121,6 +121,114 @@ def create_thread(
         createdAt=new_thread.created_at,
         updatedAt=new_thread.updated_at
     )
+class MessageInfo(BaseModel):
+    id: str = Field(..., description="Message ID")
+    role: str = Field(..., description="Message role (user/bot)")
+    content: str = Field(..., description="Message content")
+    timestamp: str = Field(..., description="Message timestamp")
+    api_role: Optional[str] = Field(None, description="API role used for user messages")
+    suggestions: Optional[List[str]] = Field(None, description="Bot message suggestions")
+    need_clarify: Optional[bool] = Field(None, description="Whether response needs clarification")
+    input_type: Optional[str] = Field(None, description="Classified input type")
+
+
+class ThreadMessagesResponse(BaseModel):
+    thread_id: str = Field(..., description="Thread identifier")
+    thread_name: str = Field(..., description="Thread name")
+    messages: List[MessageInfo] = Field(..., description="List of messages in chronological order")
+    total_messages: int = Field(..., description="Total number of messages")
+    user_id: int = Field(..., description="User ID")
+    created_at: str = Field(..., description="Thread creation timestamp")
+    updated_at: str = Field(..., description="Thread last update timestamp")
+
+
+@router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
+async def get_thread_messages(
+    thread_id: str,
+    page: int = 1,
+    limit: int = 50,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user)
+):
+    """
+    Get all messages for a specific conversation thread
+    
+    - **thread_id**: The thread/session identifier
+    - **page**: Page number for pagination (default: 1)
+    - **limit**: Number of messages per page (default: 50, max: 200)
+    
+    Returns all messages in chronological order for the specified thread.
+    Only accessible by the thread owner. Perfect for loading full conversation
+    when user clicks on a thread from the sidebar.
+    Requires authentication via JWT token.
+    """
+    try:
+        # Validate limit
+        if limit > 200:
+            limit = 200
+        if limit < 1:
+            limit = 1
+        if page < 1:
+            page = 1
+            
+        # Verify thread exists and belongs to current user
+        thread = db.query(ChatThread).filter(
+            ChatThread.id == thread_id,
+            ChatThread.user_id == current_user.id
+        ).first()
+        
+        if not thread:
+            raise HTTPException(
+                status_code=404,
+                detail="Thread not found or you don't have permission to access it"
+            )
+        
+        # Calculate offset for pagination
+        offset = (page - 1) * limit
+        
+        # Get total message count
+        total_messages = db.query(ChatMessage).filter(
+            ChatMessage.thread_id == thread_id
+        ).count()
+        
+        # Get messages for this thread with pagination
+        messages = db.query(ChatMessage).filter(
+            ChatMessage.thread_id == thread_id
+        ).order_by(ChatMessage.timestamp.asc()).offset(offset).limit(limit).all()
+        
+        # Format messages
+        formatted_messages = []
+        for message in messages:
+            message_info = MessageInfo(
+                id=message.id,
+                role=message.role,
+                content=message.content,
+                timestamp=message.timestamp.isoformat(),
+                api_role=message.api_role,
+                suggestions=message.suggestions,
+                need_clarify=message.need_clarify,
+                input_type=message.input_type
+            )
+            formatted_messages.append(message_info)
+        
+        return ThreadMessagesResponse(
+            thread_id=thread.id,
+            thread_name=thread.name,
+            messages=formatted_messages,
+            total_messages=total_messages,
+            user_id=current_user.id,
+            created_at=thread.created_at.isoformat(),
+            updated_at=thread.updated_at.isoformat()
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"❌ Error getting thread messages: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error retrieving thread messages: {str(e)}"
+        )
+
 
 @router.get("/{thread_id}", response_model=ThreadWithMessagesModel)
 def get_thread(
