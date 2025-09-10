@@ -8,8 +8,7 @@ from utils.response_parser import parse_yaml_response, validate_yaml_structure, 
 from utils.prompts import (
     PROMPT_CLASSIFY_INPUT, 
     PROMPT_CLARIFYING_QUESTIONS_GENERIC,
-    PROMPT_COMPOSE_ANSWER,
-    PROMPT_SUGGEST_FOLLOWUPS
+    PROMPT_COMPOSE_ANSWER
 )
 from utils.helpers import (
     get_persona_for,
@@ -19,7 +18,7 @@ from utils.helpers import (
     format_kb_qa_list,
     get_context_for_input_type,
     get_context_for_knowledge_case,
-    get_score_threshold,
+    get_score_threshold
     
 )
 from typing import Any, Dict, List, Tuple
@@ -34,20 +33,16 @@ logger = logging.getLogger(__name__)
 
 class AnswerNode(Node):
     def prep(self, shared):
-        # Read question from shared
         return shared["question"]
     
     def exec(self, question):
-        # Call LLM to get the answer
         return call_llm(question)
     
     def post(self, shared, prep_res, exec_res):
-        # Store the answer in shared
         shared["answer"] = exec_res
 
 
 
-# Removed _persona_for function - now imported from utils.helpers
 
 # ========== Medical Agent Nodes ==========
 
@@ -130,16 +125,17 @@ class RetrieveFromKB(Node):
         logger.info("📚 [RetrieveFromKB] PREP - Đọc query và keywords để retrieve")
         query = shared.get("query", "")
         keywords = shared.get("keywords", [])
-        
+        keywords_str = " ".join(keywords)
         # Ưu tiên dùng keywords nếu có, nếu không thì dùng query gốc
-        search_term = " ".join(keywords) if keywords else query
+        search_term = f"{query} ,{keywords_str}"   
+        user_role =  shared.get("role", "")
         logger.info(f"📚 [RetrieveFromKB] PREP - Search Term: '{search_term[:100]}...'")
-        return search_term
+        return search_term, user_role
 
-    def exec(self, search_term: str):
+    def exec(self, search_term: str, user_role: str):
         logger.info("📚 [RetrieveFromKB] EXEC - Bắt đầu retrieve từ knowledge base")
         logger.info(f"📚 [RetrieveFromKB] EXEC - Query: {search_term}")
-        results, score = retrieve(search_term, top_k=4)
+        results, score = retrieve(search_term, user_role,  top_k=4)
         logger.info(f"📚 [RetrieveFromKB] EXEC - Retrieved results: {results} , best score: {score:.4f}")
         return results, score
 
@@ -148,7 +144,7 @@ class RetrieveFromKB(Node):
         results, score = exec_res
         shared["retrieved"] = results
         shared["retrieval_score"] = score
-        shared["need_clarify"] = score < 0.15
+        shared["need_clarify"] = score < 0.3
         
         # Always continue to next node via default edge (ScoreDecisionNode)
         input_type = shared.get("input_type", "medical_question")
@@ -185,15 +181,13 @@ class ComposeAnswer(Node):
     def exec(self, inputs):
         role, query, retrieved,  score, conversation_history = inputs
         persona = get_persona_for(role)
-
-        # Provide a list of Q&A instead of a single item so the LLM can pick the best
         relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=10)
         prompt = PROMPT_COMPOSE_ANSWER.format(
             ai_role=persona['persona'],
             audience=persona['audience'],
             tone=persona['tone'],
             query=query,
-            relevant_info_from_kb=relevant_info_from_kb,
+            relevant_info_from_kb=relevant_info_from_kb if relevant_info_from_kb else "Không có thông tin từ cơ sở tri thức",
             conversation_history = conversation_history
         )
         logger.info(f"✍️ [ComposeAnswer] EXEC - prompt: {prompt}")
@@ -299,8 +293,6 @@ class MainDecisionAgent(Node):
     
     def exec(self, inputs):
         query, role = inputs
-        
-
         logger.info("[MainDecision] EXEC - Using LLM for classification")
         prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role)
         
