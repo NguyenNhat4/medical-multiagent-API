@@ -46,56 +46,6 @@ class AnswerNode(Node):
 
 # ========== Medical Agent Nodes ==========
 
-class ClassifyInput(Node):
-    """Node để phân loại input của user thành các loại khác nhau"""
-    
-    def prep(self, shared):
-        logger.info("[ClassifyInput] PREP - Đọc query để phân loại")
-        query = shared.get("query", "").strip()
-        role = shared.get("role", "")
-        logger.info(f"[ClassifyInput] PREP - Query: '{query}', Role: {role}")
-        return query, role
-    
-    def exec(self, inputs):
-        query, role = inputs
-
-        pattern_result = classify_input_pattern(query)
-        if pattern_result["confidence"] in ["high", "medium"]:
-            logger.info(f"[ClassifyInput] EXEC - Pattern classification: {pattern_result}")
-            return pattern_result
-        
-        # For ambiguous cases, use LLM
-        if len(query) > 3:
-            logger.info("[ClassifyInput] EXEC - Using LLM for classification")
-            prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role)
-            
-            try:
-                resp = call_llm(prompt)
-                result = parse_yaml_with_schema(
-                    resp,
-                    required_fields=["type"],
-                    optional_fields=["confidence", "reason"],
-                    field_types={"type": str, "confidence": str, "reason": str}
-                )
-                logger.info(f"[ClassifyInput] EXEC -resp {resp}")
-                logger.info(f"[ClassifyInput] EXEC - result {result}")
-
-                if result:
-                    logger.info(f"[ClassifyInput] EXEC - LLM classification: {result}")
-                    return result
-            except Exception as e:
-                logger.warning(f"[ClassifyInput] EXEC - LLM classification failed: {e}")
-        
-        return {"type": "topic_suggestion", "confidence": "high"}
-    
-    def post(self, shared, prep_res, exec_res):
-        logger.info(f"[ClassifyInput] POST - Classification result: {exec_res}")
-        shared["input_type"] = exec_res["type"]
-        shared["classification_confidence"] = exec_res.get("confidence", "low")
-        shared["classification_reason"] = exec_res.get("reason", "")
-        
-        # Return action based on classification
-        return exec_res["type"]
 
 
 class IngestQuery(Node):
