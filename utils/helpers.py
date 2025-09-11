@@ -9,45 +9,10 @@ import yaml
 from .call_llm import call_llm
 from .kb import retrieve, retrieve_random_by_role
 from .response_parser import parse_yaml_response, validate_yaml_structure
+from .role_ENUM import RoleEnum
 
 logger = logging.getLogger(__name__)
 
-
-def get_persona_for(role: str) -> Dict[str, str]:
-    """Get persona configuration based on user role"""
-    rl = role.lower()
-    if "bác sĩ nha khoa" in rl:
-        return {
-            "persona": "Bác sĩ nội tiết (chuyên ĐTĐ)",
-            "audience": "bác sĩ nha khoa",
-            "tone": (
-                "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nha khoa hiểu, mục tiêu giúp bác sĩ nha khoa hiểu hơn về nội tiết "
-            ),
-        }
-    if "bác sĩ nội tiết" in rl:
-        return {
-            "persona": "Bác sĩ nha khoa",
-            "audience": "bác sĩ nội tiết",
-            "tone": (
-                "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nội tiết hiểu, mục tiêu giúp bác sĩ nội tiết hiểu hơn về nha khoa phục vụ cho nghành nghề của mình"
-            ),
-        }
-    if "bệnh nhân đái tháo đường" in rl or "đái tháo đường" in rl:
-        return {
-            "persona": "Bác sĩ nội tiết",
-            "audience": "bệnh nhân",
-            "tone": (
-                "Thái độ thân thiện, Ngôn ngữ giản dị, không nói dài dòng,không dùng từ chuyên môn. "
-            ),
-        }
-    # Bệnh nhân nha khoa (mặc định)
-    return {
-        "persona": "Bác sĩ nha khoa",
-        "audience": "bệnh nhân",
-        "tone": (
-            "Thái độ thân thiện, Ngôn ngữ thân thiện, không  dùng từ chuyên môn"
-        ),
-    }
 
 
 def get_topics_by_role(role: str) -> Tuple[List[str], str]:
@@ -78,42 +43,57 @@ def get_topics_by_role(role: str) -> Tuple[List[str], str]:
 
 
 def get_fallback_topics_by_role(role: str) -> List[str]:
-    """Fallback topics based on role when cannot retrieve from KB"""
-    role_lower = role.lower()
-    
-    if "bác sĩ nha khoa" in role_lower:
-        return [
+    """Fallback topics based on role when cannot retrieve from KB.
+
+    Supports RoleEnum values; falls back to Vietnamese phrase detection.
+    """
+    topics_by_role: Dict[RoleEnum, List[str]] = {
+        RoleEnum.DOCTOR_DENTAL: [
             "Quản lý bệnh nhân đái tháo đường trong nha khoa",
             "Điều trị viêm nha chu ở bệnh nhân ĐTĐ",
             "Phối hợp với bác sĩ nội tiết trong điều trị",
             "Biến chứng nha khoa do đái tháo đường",
-            "Kháng sinh trong điều trị nha khoa bệnh nhân ĐTĐ"
-        ]
-    elif "bác sĩ nội tiết" in role_lower:
-        return [
+            "Kháng sinh trong điều trị nha khoa bệnh nhân ĐTĐ",
+        ],
+        RoleEnum.DOCTOR_ENDOCRINE: [
             "Mối liên hệ giữa kiểm soát đường huyết và sức khỏe nha chu",
             "Khi nào giới thiệu bệnh nhân đến nha khoa",
             "Thuốc đái tháo đường ảnh hưởng đến răng miệng",
             "Biến chứng răng miệng ở bệnh nhân ĐTĐ type 1 và type 2",
-            "Tư vấn chăm sóc răng miệng cho bệnh nhân ĐTĐ"
-        ]
-    elif "đái tháo đường" in role_lower:
-        return [
+            "Tư vấn chăm sóc răng miệng cho bệnh nhân ĐTĐ",
+        ],
+        RoleEnum.PATIENT_DIABETES: [
             "Cách chăm sóc răng miệng khi bị đái tháo đường",
             "Triệu chứng cảnh báo ở răng miệng cần chú ý",
             "Khi nào cần đi khám nha khoa",
             "Chế độ ăn tốt cho răng miệng và đường huyết",
-            "Cách đánh răng đúng cách cho người ĐTĐ"
-        ]
-    else:
-        # Default cho bệnh nhân nha khoa hoặc không xác định
-        return [
+            "Cách đánh răng đúng cách cho người ĐTĐ",
+        ],
+        RoleEnum.PATIENT_DENTAL: [
             "Cách chăm sóc răng miệng hàng ngày",
             "Dấu hiệu cần khám nha khoa ngay",
             "Phòng ngừa sâu răng và viêm nướu",
             "Chế độ ăn uống tốt cho răng miệng",
-            "Tần suất khám nha khoa định kỳ"
-        ]
+            "Tần suất khám nha khoa định kỳ",
+        ],
+    }
+
+    role_lower = (role or "").lower()
+    # Try RoleEnum value match
+    for enum_role in RoleEnum:
+        if role_lower == enum_role.value:
+            return topics_by_role[enum_role]
+
+    # Vietnamese phrase detection for legacy strings
+    if "bác sĩ nha khoa" in role_lower:
+        return topics_by_role[RoleEnum.DOCTOR_DENTAL]
+    if "bác sĩ nội tiết" in role_lower:
+        return topics_by_role[RoleEnum.DOCTOR_ENDOCRINE]
+    if "đái tháo đường" in role_lower:
+        return topics_by_role[RoleEnum.PATIENT_DIABETES]
+
+    # Default
+    return topics_by_role[RoleEnum.PATIENT_DENTAL]
 
 def get_most_relevant_QA(hits: List[Dict[str, Any]]) -> str:
     """Return the first Q&A from KB hits that has a non-empty answer"""

@@ -11,15 +11,11 @@ from utils.prompts import (
     PROMPT_COMPOSE_ANSWER
 )
 from utils.helpers import (
-    get_persona_for,
-    get_topics_by_role,
-    get_fallback_topics_by_role,
-    get_most_relevant_QA,
     format_kb_qa_list,
-    get_context_for_input_type,
-    get_context_for_knowledge_case,
     get_score_threshold
-    
+)
+from utils.role_ENUM import (
+    PERSONA_BY_ROLE
 )
 from typing import Any, Dict, List, Tuple
 import textwrap
@@ -131,7 +127,7 @@ class ComposeAnswer(Node):
 
     def exec(self, inputs):
         role, query, retrieved,  score, conversation_history = inputs
-        persona = get_persona_for(role)
+        persona = PERSONA_BY_ROLE[role]
         relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=10)
         prompt = PROMPT_COMPOSE_ANSWER.format(
             ai_role=persona['persona'],

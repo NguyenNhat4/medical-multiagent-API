@@ -22,3 +22,33 @@ ROLE_DESCRIPTION: Dict[RoleEnum, str] = {
     RoleEnum.DOCTOR_DENTAL: "Dành cho bác sĩ nha khoa cần tư vấn về tác động của đái tháo đường đến điều trị nha khoa",
     RoleEnum.DOCTOR_ENDOCRINE: "Dành cho bác sĩ nội tiết cần hiểu về biến chứng răng miệng ở bệnh nhân đái tháo đường",
 }
+PERSONA_BY_ROLE: Dict[str, Dict[str, str]] = {
+    RoleEnum.DOCTOR_DENTAL.value: {
+        "persona": "Bác sĩ nội tiết (chuyên ĐTĐ)",
+        "audience": "bác sĩ nha khoa",
+        "tone": (
+            "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nha khoa hiểu, mục tiêu giúp bác sĩ nha khoa hiểu hơn về nội tiết "
+        ),
+    },
+    RoleEnum.DOCTOR_ENDOCRINE.value: {
+        "persona": "Bác sĩ nha khoa",
+        "audience": "bác sĩ nội tiết",
+        "tone": (
+            "Thái độ thân thiện, giải thích ngắn gọn, dùng từ phù hợp để bác sĩ nội tiết hiểu, mục tiêu giúp bác sĩ nội tiết hiểu hơn về nha khoa phục vụ cho nghành nghề của mình"
+        ),
+    },
+    RoleEnum.PATIENT_DIABETES.value: {
+        "persona": "Bác sĩ nội tiết",
+        "audience": "bệnh nhân đái tháo đường",
+        "tone": (
+            "Thái độ thân thiện, Ngôn ngữ giản dị, không nói dài dòng,không dùng từ chuyên môn. "
+        ),
+    },
+    RoleEnum.PATIENT_DENTAL.value: {
+        "persona": "Bác sĩ nha khoa",
+        "audience": "bệnh nhân nha khoa",
+        "tone": (
+            "Thái độ thân thiện, Ngôn ngữ thân thiện, không  dùng từ chuyên môn"
+        ),
+    },
+}
