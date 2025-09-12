@@ -409,8 +409,7 @@ async def chat(
             timestamp=datetime.now(),
             api_role=request.role
         )
-        db.add(user_message)
-        db.commit()
+        # Defer DB writes to a single transaction later
 
         # Serialize conversation history for the flow
         conversation_history = serialize_conversation_history(thread.messages)
@@ -444,7 +443,7 @@ async def chat(
             need_clarify=need_clarify
         )
         
-        # Store bot message in database
+        # Create bot message (defer adding to DB until transaction)
         bot_message = ChatMessage(
             id=str(uuid.uuid4()),
             thread_id=thread_id,
@@ -456,14 +455,16 @@ async def chat(
             need_clarify=need_clarify,
             input_type=input_type
         )
-        db.add(bot_message)
-        
-        # Update thread's updated_at timestamp
-        thread = db.query(ChatThread).filter(ChatThread.id == thread_id).first()
-        if thread:
-            thread.updated_at = datetime.now()
-        
-        db.commit()
+
+        # Single transaction: create user_message, create bot_message, update thread timestamp
+        with db.begin():
+            db.add(user_message)
+            db.add(bot_message)
+
+            # Update thread's updated_at timestamp
+            thread = db.query(ChatThread).filter(ChatThread.id == thread_id).first()
+            if thread:
+                thread.updated_at = datetime.now()
 
         # Log conversation in background (async)
         background_tasks.add_task(
@@ -480,23 +481,6 @@ async def chat(
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
-
-
-# Background tasks
-async def log_conversation_background(
-    user_message: str, bot_response: str, session_id: Optional[str]
-):
-    """Background task to log conversation"""
-    try:
-        # Add session info if available
-        if session_id:
-            conversation_logger._write_to_log(f"[Session: {session_id}]")
-
-        conversation_logger.log_exchange(user_message, bot_response)
-        logger.info("📝 Conversation logged successfully")
-
-    except Exception as e:
-        logger.error(f"❌ Error logging conversation: {str(e)}")
 
 
 # Exception handlers
