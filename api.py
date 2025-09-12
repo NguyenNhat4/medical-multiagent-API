@@ -26,7 +26,6 @@ from chat_routes import router as chat_router
 
 # Import our flow and conversation logger
 from flow import create_med_agent_flow
-from utils.conversation_logger import conversation_logger
 from utils.response_parser import (
     parse_medical_response,
     handle_greeting_response,

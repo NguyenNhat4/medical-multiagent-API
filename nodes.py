@@ -3,7 +3,7 @@ from unittest import result
 from pocketflow import Node
 from utils.call_llm import call_llm
 from utils.kb import retrieve, retrieve_random_by_role
-from utils.conversation_logger import log_user_message, log_bot_response, log_conversation_exchange
+
 from utils.response_parser import parse_yaml_response, validate_yaml_structure, parse_yaml_with_schema
 from utils.prompts import (
     PROMPT_CLASSIFY_INPUT, 
@@ -68,12 +68,12 @@ class IngestQuery(Node):
 
 class RetrieveFromKB(Node):
     def prep(self, shared):
-        logger.info("📚 [RetrieveFromKB] PREP - Đọc query và keywords để retrieve")
+        logger.info("📚 [RetrieveFromKB] PREP - Đọc query và rag_questions để retrieve")
         query = shared.get("query", "")
-        keywords = shared.get("keywords", [])
-        keywords_str = " ".join(keywords)
-        # Ưu tiên dùng keywords nếu có, nếu không thì dùng query gốc
-        search_term = f"{query} ,{keywords_str}"   
+        rag_questions = shared.get("rag_questions", [])
+        # Kết hợp query gốc với các câu hỏi RAG để tìm kiếm toàn diện hơn
+        all_queries = [query] + rag_questions
+        search_term = " ".join(all_queries)   
         user_role =  shared.get("role", "")
         logger.info(f"📚 [RetrieveFromKB] PREP - Search Term: '{search_term[:100]}...'")
         return search_term, user_role
@@ -82,7 +82,15 @@ class RetrieveFromKB(Node):
         search_term, user_role = inputs
         logger.info("📚 [RetrieveFromKB] EXEC - Bắt đầu retrieve từ knowledge base")
         logger.info(f"📚 [RetrieveFromKB] EXEC - Query: {search_term}")
-        results, score = retrieve(search_term, user_role,  top_k=4)
+        import time
+
+        start_time = time.time()
+        results, score = retrieve(search_term, user_role, top_k=4)
+        elapsed_time = time.time() - start_time
+
+        # Log elapsed time to a file
+        with open("retrieve_timing.log", "a", encoding="utf-8") as f:
+            f.write(f" Time: {elapsed_time:.4f} seconds\n")
         logger.info(f"📚 [RetrieveFromKB] EXEC - Retrieved results: {results} , best score: {score:.4f}")
         return results, score
 
@@ -169,18 +177,19 @@ class ClarifyQuestionNode(Node):
         role = shared.get("role", "")
         query = shared.get("query", "")
         retrieved = shared.get("retrieved", [])
-        keywords = shared.get("keywords", [])
-        logger.info(f"[ClarifyQuestion] PREP - Role: {role}, Query: '{query[:50]}...', Keywords: {keywords}")
-        return role, query, retrieved, keywords
+        rag_questions = shared.get("rag_questions", [])
+        logger.info(f"[ClarifyQuestion] PREP - Role: {role}, Query: '{query[:50]}...', RAG Questions: {len(rag_questions)}")
+        return role, query, retrieved, rag_questions
     
     def exec(self, inputs):
-        role, query, retrieved, keywords = inputs
+        role, query, retrieved, rag_questions = inputs
         logger.info(f"[ClarifyQuestion] EXEC - Generating clarification for low-score medical query")
         
         suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
         
+        
         result = {
-            "explain": "Có thể bạn đang muốn hỏi về một trong những vấn đề sau đây? Hãy chọn câu hỏi phù hợp hoặc diễn đạt lại câu hỏi của bạn nhé! 🤔",
+            "explain": "Hiện tại mình chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!",
             "suggestion_questions": suggestion_questions,
             "preformatted": True,
         }
@@ -251,8 +260,8 @@ class MainDecisionAgent(Node):
             result = parse_yaml_with_schema(
                 resp,
                 required_fields=["type"],
-                optional_fields=["confidence", "reason", "keywords"],
-                field_types={"type": str, "confidence": str, "reason": str, "keywords": list}
+                optional_fields=["confidence", "reason", "rag_questions"],
+                field_types={"type": str, "confidence": str, "reason": str, "rag_questions": list}
             )
             logger.info(f"[MainDecision] EXEC - result after parse: {result}")
             
@@ -263,14 +272,14 @@ class MainDecisionAgent(Node):
             logger.warning(f"[MainDecision] EXEC - LLM classification failed: {e}")
         
         # Default fallback
-        return {"type": "topic_suggestion", "confidence": "high", "keywords": []}
+        return {"type": "topic_suggestion", "confidence": "high", "rag_questions": []}
     
     def post(self, shared, prep_res, exec_res):
         logger.info(f"[MainDecision] POST - Classification result: {exec_res}")
         shared["input_type"] = exec_res["type"]
         shared["classification_confidence"] = exec_res.get("confidence", "low")
         shared["classification_reason"] = exec_res.get("reason", "")
-        shared["keywords"] = exec_res.get("keywords", [])
+        shared["rag_questions"] = exec_res.get("rag_questions", [])
         
         # Route based on classification
         input_type = exec_res["type"]
