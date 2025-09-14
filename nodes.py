@@ -185,7 +185,12 @@ class ClarifyQuestionNode(Node):
         role, query, retrieved, rag_questions = inputs
         logger.info(f"[ClarifyQuestion] EXEC - Generating clarification for low-score medical query")
         
-        suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
+        # Lấy danh sách câu hỏi từ retrieved hoặc random nếu retrieved trống
+        if not retrieved:
+            suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
+        else:
+            # Lấy câu hỏi từ retrieved data
+            suggestion_questions = [item.get('cau_hoi', '') for item in retrieved if item.get('cau_hoi')]
         
         
         result = {
