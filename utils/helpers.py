@@ -167,7 +167,7 @@ def get_context_for_knowledge_case(input_type: str) -> str:
 
 def get_score_threshold() -> float:
     """Get retrieval score threshold for decision making"""
-    return 0.3
+    return 0.1
 
 
 def generate_clarifying_questions_for_topic(topic: str, role: str) -> Dict[str, Any]:

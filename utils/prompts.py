@@ -4,19 +4,17 @@ Prompts for medical agent nodes
 
 
 PROMPT_CLASSIFY_INPUT = """
-Bạn là chuyên gia phân loại input và tạo câu hỏi hỗ trợ RAG cho ứng dụng tư vấn y khoa, đặc biệt về vấn đề nội tiết và nha khoa.
+Bạn là chuyên gia tạo câu hỏi để retrieve từ KB hỗ trợ RAG và phân loại input cho ứng dụng tư vấn y khoa, đặc biệt về vấn đề nội tiết và nha khoa.
 
 Nhiệm vụ:
 1. Phân loại câu input của người dùng thành đúng 1 trong 3 loại sau:
    - greeting: chào hỏi, xã giao (vd: "hi", "chào bác sĩ", "hihi")
-   - medical_question: câu hỏi rõ ràng liên quan đến y khoa, sức khỏe, bệnh, điều trị. Lưu ý: input="ê" -> quá ngắn nên không tự suy là "ê buốt răng" -> không phải là medical_question
+   - medical_question: câu hỏi rõ ràng liên quan đến y khoa, sức khỏe, bệnh, điều trị.
    - topic_suggestion: có yêu cầu gợi ý chủ đề, danh sách tham khảo, hoặc ý định chưa rõ, ngoài phạm vi y khoa, spam, vô nghĩa, khẳng định không liên quan.
-
 2. Tạo danh sách câu hỏi hỗ trợ RAG từ input dựa trên nội dung và vai trò người dùng (role context):
    - Nếu input người dùng không rõ nghĩa hoặc ý định hoặc không phải là medical_question thì có thể để trống
-   - Nếu có câu hỏi, phải có ít nhất 3-5 câu hỏi liên quan, càng nhiều và càng bao quát các khía cạnh của vấn đề càng tốt
-   - Các câu hỏi phải giúp RAG tìm kiếm thông tin y khoa liên quan: triệu chứng, nguyên nhân, chẩn đoán, điều trị, phòng ngừa, biến chứng
-   - Câu hỏi phải cụ thể và có thể tìm thấy trong tài liệu y khoa
+   - Nếu có câu hỏi, phải có câu hỏi liên quan, càng nhiều câu hỏi được rephrase khả năng retrieve từ KB càng tốt.
+   - Các câu hỏi phải giúp RAG tìm kiếm thông tin y khoa liên quan
 
 Input: "{query}"
 Role context: {role}
@@ -128,7 +126,7 @@ NHIỆM VỤ
  
 2) Soạn `explanation` ngắn gọn, trực tiếp:
    - Giải thích dựa vào {{best_answer}}, nhấn mạnh từ quan trọng: **<từ quan trọng>**
-   - Độ dài tối đa 2-3 câu ngắn, ngôn từ phù hợp {audience}
+   - Độ dài tối đa 2-3 câu ngắn, ngôn từ phù hợp cho {audience}
    - Xuống dòng, ghi: 👉 Tóm lại, <viết lại ngắn gọn dựa vào {{best_answer}}>
    - Có thể không cần viết phần tóm lại nếu câu trả lời đã đủ ngắn gọn.
 3) Soạn `questions`: viết lại các câu hỏi  LIÊN QUAN, không trùng {{best_question}}, rút từ các mục còn lại trong danh sách đã retrieve.
