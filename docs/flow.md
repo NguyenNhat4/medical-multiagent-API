@@ -1,79 +1,169 @@
 ---
 layout: default
-title: "Current Flow"
+title: "Medical Agent Flow"
 nav_order: 2
 ---
 
-## Medical Agent Flow (Current)
+## Medical Agent Flow (Updated Architecture)
 
-This document describes the current execution flow of nodes in the project. The top-level flow is a simple linear pipeline, while the core decision-making happens inside `MainAgentNode`.
+This document describes the current modular execution flow using PocketFlow framework. The system uses a multi-agent approach with specialized nodes for different aspects of medical conversation handling.
 
-### Top-level Flow
-
-```mermaid
-flowchart LR
-    A[IngestQuery] --> B[MainAgentNode]
-    B --> C[LogConversationNode]
-```
-
-- `IngestQuery`: Reads `role` and raw `input` from the shared store, normalizes them, and stores `query`.
-- `MainAgentNode`: Central orchestrator that classifies the input, retrieves knowledge if needed, composes the final answer or topic suggestions, and produces follow-up suggestions when applicable.
-- `LogConversationNode`: Logs the final user query and bot answer to `conversation.log`.
-
-### MainAgentNode Internal Logic
+### Overall Flow Architecture
 
 ```mermaid
 flowchart TD
-    subgraph MainAgentNode
-        direction LR
-        M1[ClassifyInput] -->|type=greeting/statement/nonsense| TS[TopicSuggestResponse]
-        M1 -->|type=medical_question/topic_suggestion| RET[RetrieveFromKB]
-
-        RET -->|score >= threshold AND type=medical_question| COMP[ComposeAnswer]
-        RET -->|else| TS
-
-        COMP --> FUP[SuggestFollowups]
-    end
+    A[IngestQuery] --> B[MainDecisionAgent]
+    
+    B -->|retrieve_kb| C[RetrieveFromKB]
+    B -->|topic_suggest| D[TopicSuggestResponse]
+    B -->|greeting| E[GreetingResponse]
+    
+    C --> F[ScoreDecisionNode]
+    
+    F -->|compose_answer| G[ComposeAnswer]
+    F -->|clarify| H[ClarifyQuestionNode]
+    
+    E --> D
+    G --> I[End]
+    D --> I
+    H --> I
 ```
 
-- `ClassifyInput`:
-  - Reads `query` and `role`.
-  - Uses lightweight pattern-based classification first; falls back to LLM with schema validation.
-  - Sets `shared["input_type"]` and routes logic.
+### Node Descriptions
 
-- `RetrieveFromKB`:
-  - Retrieves top-K KB entries with a similarity `score`.
-  - Writes `shared["retrieved"]`, `shared["retrieval_score"]`, and `shared["need_clarify"]`.
+#### 1. IngestQuery
+- **Purpose**: Entry point for all user inputs
+- **Function**: Normalizes and validates user input and role
+- **Input**: `role`, `input` from shared store
+- **Output**: Processed `query` and `role` to shared store
+- **Routing**: Always routes to `MainDecisionAgent` via "default"
 
-- Routing decision (inside `MainAgentNode`):
-  - If `input_type` ∈ {greeting, statement, nonsense} → go to `TopicSuggestResponse` with context-dependent intro.
-  - If `input_type` = medical_question:
-    - If `score >= threshold` → `ComposeAnswer` then `SuggestFollowups`.
-    - Else → `TopicSuggestResponse` (context: low score).
-  - If `input_type` = topic_suggestion → `TopicSuggestResponse`.
+#### 2. MainDecisionAgent  
+- **Purpose**: Central classification and routing agent
+- **Function**: Uses LLM to classify user input and determine processing path
+- **Classification Types**:
+  - `medical_question`: Medical queries requiring KB search
+  - `greeting`: Welcome/hello messages
+  - `topic_suggest`: Requests for topic suggestions
+  - `statement`: General statements
+  - `nonsense`: Invalid/unclear inputs
+- **Features**:
+  - Generates RAG questions for enhanced retrieval
+  - Provides classification confidence and reasoning
+- **Routing**:
+  - `medical_question` → RetrieveFromKB
+  - `greeting` → GreetingResponse
+  - Other types → TopicSuggestResponse
 
-- `ComposeAnswer`:
-  - Builds KB context, then prompts LLM to produce a detailed answer.
-  - Stores structured `answer_obj` and `answer` (`final` text) in shared store.
+#### 3. RetrieveFromKB
+- **Purpose**: Knowledge base search and retrieval
+- **Function**: 
+  - Searches role-specific medical knowledge base
+  - Uses TF-IDF vectorization with cosine similarity
+  - Combines original query with RAG questions for comprehensive search
+- **Features**:
+  - Role-based knowledge filtering
+  - Top-K retrieval (default: 7 results)
+  - Performance logging for optimization
+- **Output**: Retrieved results and similarity scores
+- **Routing**: Always routes to `ScoreDecisionNode`
 
-- `SuggestFollowups`:
-  - Generates up to 3 follow-up questions based on query, history, answer text, and KB context.
-  - Writes `shared["suggestions"]`.
+#### 4. ScoreDecisionNode
+- **Purpose**: Quality-based routing decision
+- **Function**: Evaluates retrieval quality and routes to appropriate response handler
+- **Logic**:
+  - For `medical_question`:
+    - High score (≥ threshold) → ComposeAnswer
+    - Low score (< threshold) → ClarifyQuestionNode
+  - Other types → ClarifyQuestionNode
+- **Routing**:
+  - `compose_answer`: High-confidence medical responses
+  - `clarify`: Low-confidence or clarification needed
+  - `topic_suggest`: Topic suggestions
 
-- `TopicSuggestResponse`:
-  - Produces an intro tailored to context (`greeting`, `statement`, `nonsense`, or low-score medical) and a bulleted topic list for the current role.
-  - Writes `shared["answer"]` and the first 3 topics to `shared["suggestions"]`.
+#### 5. ComposeAnswer
+- **Purpose**: Generate comprehensive medical answers
+- **Function**:
+  - Formats KB context with role-specific persona
+  - Uses conversation history for context
+  - Generates structured YAML responses with explanation and suggestions
+- **Features**:
+  - Role-based persona adaptation
+  - Conversation history integration
+  - Structured output with validation
+- **Output**: Formatted medical advice with follow-up questions
 
-### Data Written to Shared Store
+#### 6. ClarifyQuestionNode
+- **Purpose**: Handle low-confidence medical queries
+- **Function**: 
+  - Provides clarification message
+  - Suggests related questions from KB or random sampling
+- **Use Cases**:
+  - Insufficient information for accurate response
+  - Ambiguous medical queries
+  - Need for more specific information
 
-- Keys commonly used:
-  - `role`, `input`, `query`, `history`
-  - `input_type`, `response_context`
-  - `retrieved`, `retrieval_score`, `need_clarify`
-  - `answer_obj`, `answer`, `suggestions`
-  - `conversation_logged`
+#### 7. TopicSuggestResponse
+- **Purpose**: Provide topic exploration
+- **Function**: 
+  - Generates role-specific topic suggestions
+  - Uses random sampling from knowledge base
+- **Use Cases**:
+  - User requests topic suggestions
+  - General conversation starters
+  - Exploration of available medical topics
 
-### Notes
+#### 8. GreetingResponse
+- **Purpose**: Handle greeting messages
+- **Function**: Sets friendly context and routes to topic suggestions
+- **Output**: Welcome message with transition to topic exploration
 
-- The API layer (`/api/chat`) consumes `answer`, `suggestions`, and `input_type`. Parsing/structuring of the response (explanation, summary, question suggestions) happens via the response parser utilities.
+### Shared Store Data Flow
+
+The system uses a shared store for communication between nodes. Key data structures:
+
+#### Input Data
+- `role`: User role (patient_dental, patient_diabetes, doctor_dental, doctor_endocrine)
+- `input`: Raw user input text
+- `conversation_history`: Previous conversation context
+
+#### Processing Data  
+- `query`: Normalized user query
+- `input_type`: Classification result (medical_question, greeting, topic_suggest, etc.)
+- `classification_confidence`: Confidence level of classification
+- `classification_reason`: Reasoning behind classification
+- `rag_questions`: Additional questions generated for enhanced retrieval
+
+#### Knowledge Retrieval Data
+- `retrieved`: List of retrieved KB entries with scores
+- `retrieval_score`: Best similarity score from KB search
+- `need_clarify`: Boolean indicating if clarification is needed
+
+#### Response Data
+- `answer_obj`: Structured response object
+- `explain`: Main explanation/answer text
+- `suggestion_questions`: Follow-up question suggestions
+- `response_context`: Context for response generation
+
+### API Integration
+
+The FastAPI layer (`/api/chat`) consumes the following outputs:
+- `explain`: Main response text displayed to user
+- `suggestion_questions`: Clickable follow-up suggestions
+- `input_type`: Used for response formatting and UI behavior
+
+### Role-Based Knowledge Access
+
+Each role has access to specific knowledge bases:
+- `patient_dental` → `bnrhm.csv` (Bệnh nhân răng hàm mặt)
+- `patient_diabetes` → `bndtd.csv` (Bệnh nhân đái tháo đường)  
+- `doctor_dental` → `bsrhm.csv` (Bác sĩ răng hàm mặt)
+- `doctor_endocrine` → `bsnt.csv` (Bác sĩ nội tiết)
+
+### Performance Features
+
+- **Retrieval Timing**: Performance logging for KB search optimization
+- **Fallback Mechanisms**: Graceful handling of LLM failures
+- **Structured Validation**: YAML schema validation for consistent outputs
+- **Role-Specific Personas**: Tailored response tone and content per user role
 

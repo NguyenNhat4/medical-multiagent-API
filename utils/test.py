@@ -1,7 +1,10 @@
-from kb import retrieve
 
 
 
+from  .kb import *
+from .role_ENUM import *
 
-print(retrieve(""))
+
+
+print(retrieve("xin chào", RoleEnum.PATIENT_DENTAL.value))
 
