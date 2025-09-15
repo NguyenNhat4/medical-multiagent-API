@@ -394,9 +394,17 @@ async def chat(
                 detail="Thread not found or you don't have permission to access it"
             )
             
+        # Validate and normalize role
         role_name = request.role
+        
+        # Check if role is valid, if not use default
+        valid_roles = [role.value for role in RoleEnum]
+        if role_name not in valid_roles:
+            logger.warning(f"⚠️  Invalid role '{role_name}', using default role '{RoleEnum.PATIENT_DENTAL.value}'")
+            role_name = RoleEnum.PATIENT_DENTAL.value
+        
         logger.info(
-            f"🔥 New chat request - Role: {role_name} (from: {request.role}), Message: {request.message[:50]}..."
+            f"🔥 New chat request - Role: {role_name} (validated from: {request.role}), Message: {request.message[:50]}..."
         )
 
         # Store user message in database

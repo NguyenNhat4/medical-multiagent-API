@@ -131,11 +131,17 @@ class ComposeAnswer(Node):
         retrieved = shared.get("retrieved", [])
         score = shared.get("retrieval_score", 0.0)
         conversation_history = shared.get("conversation_history", [])
-        logger.info(f"✍️ [ComposeAnswer] retrieved: {retrieved}")
+        logger.info(f"✍️ [ComposeAnswer] PREP - Role: '{role}', Query: '{query[:50]}...', Retrieved: {len(retrieved)} items")
         return (role, query, retrieved, score, conversation_history)
 
     def exec(self, inputs):
         role, query, retrieved,  score, conversation_history = inputs
+        
+        # Handle missing or invalid role with fallback
+        if role not in PERSONA_BY_ROLE:
+            logger.warning(f"✍️ [ComposeAnswer] EXEC - Invalid role '{role}', using default patient_diabetes role")
+            role = "patient_diabetes"  # Default fallback role
+        
         persona = PERSONA_BY_ROLE[role]
         relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=10)
         
