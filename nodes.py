@@ -365,7 +365,7 @@ class FallbackNode(Node):
             logger.info(f"🔄 [FallbackNode] EXEC - Retrieved {len(results)} results, best score: {score:.4f}")
             logger.info(f"🔄 [FallbackNode] EXEC - Results: {results}")
             # Kiểm tra score threshold
-            if score > 0.5:
+            if score > 0.35:
                 # Có kết quả tốt - lấy câu trả lời có score cao nhất
                 best_answer = results[0] if results else None
                 if best_answer:
