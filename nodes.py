@@ -7,13 +7,13 @@ from utils.kb import retrieve, retrieve_random_by_role
 from utils.response_parser import parse_yaml_response, validate_yaml_structure, parse_yaml_with_schema
 from utils.prompts import (
     PROMPT_CLASSIFY_INPUT, 
-    PROMPT_CLARIFYING_QUESTIONS_GENERIC,
     PROMPT_COMPOSE_ANSWER
 )
 from utils.helpers import (
     format_kb_qa_list,
     get_score_threshold,
-    _format_conversation_history
+    format_conversation_history,
+    log_llm_timing
 )
 from utils.role_ENUM import (
     PERSONA_BY_ROLE
@@ -23,17 +23,24 @@ import textwrap
 import yaml
 import logging
 import re
+import time
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
-
 
 class AnswerNode(Node):
     def prep(self, shared):
         return shared["question"]
     
     def exec(self, question):
-        return call_llm(question)
+        start_time = time.time()
+        result = call_llm(question)
+        end_time = time.time()
+        
+        # Log LLM timing
+        log_llm_timing("AnswerNode", start_time, end_time, len(question))
+        
+        return result
     
     def post(self, shared, prep_res, exec_res):
         shared["answer"] = exec_res
@@ -86,7 +93,8 @@ class RetrieveFromKB(Node):
         import time
 
         start_time = time.time()
-        results, score = retrieve(search_term, user_role, top_k=7)
+        # Reduce retrieval breadth
+        results, score = retrieve(search_term, user_role, top_k=5)
         elapsed_time = time.time() - start_time
 
         # Log elapsed time to a file
@@ -143,10 +151,11 @@ class ComposeAnswer(Node):
             role = "patient_diabetes"  # Default fallback role
         
         persona = PERSONA_BY_ROLE[role]
-        relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=10)
+        # Compact KB context
+        relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=6)
         
         # Format conversation history
-        formatted_history = _format_conversation_history(conversation_history)
+        formatted_history = format_conversation_history(conversation_history)
         
         prompt = PROMPT_COMPOSE_ANSWER.format(
             ai_role=persona['persona'],
@@ -157,7 +166,14 @@ class ComposeAnswer(Node):
             conversation_history = formatted_history
         )
         logger.info(f"✍️ [ComposeAnswer] EXEC - prompt: {prompt}")
+        
+        start_time = time.time()
         result = call_llm(prompt)
+        end_time = time.time()
+        
+        # Log LLM timing
+        log_llm_timing("ComposeAnswer", start_time, end_time, len(prompt))
+        
         logger.info(f"✍️ [ComposeAnswer] EXEC - LLM response received")
         result = parse_yaml_with_schema(result, required_fields=["explanation", "suggestion_questions"], field_types={"explanation": str, "suggestion_questions": list})
         logger.info(f"✍️ [ComposeAnswer] EXEC - result: {result}")
@@ -198,10 +214,10 @@ class ClarifyQuestionNode(Node):
         
         # Lấy danh sách câu hỏi từ retrieved hoặc random nếu retrieved trống
         if not retrieved:
-            suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
+            suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=4)]
         else:
             # Lấy câu hỏi từ retrieved data
-            suggestion_questions = [item.get('cau_hoi', '') for item in retrieved if item.get('cau_hoi')]
+            suggestion_questions = [item.get('cau_hoi', '') for item in retrieved if item.get('cau_hoi')][:5]
         
         
         result = {
@@ -234,8 +250,8 @@ class TopicSuggestResponse(Node):
         role, query = inputs
         logger.info(f"[TopicSuggestResponse] EXEC - Generating topic suggestions for role: {role}")
         
-        # Get 10 topic suggestions for exploration
-        suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=10)]
+        # Get fewer topic suggestions to reduce tokens
+        suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
         
         result = {
             "explain": "Mình gợi ý bạn các chủ đề sau nhé! Bạn có thể chọn bất kỳ chủ đề nào mà bạn quan tâm 😊",
@@ -271,7 +287,13 @@ class MainDecisionAgent(Node):
         prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role)
         
         try:
+            start_time = time.time()
             resp = call_llm(prompt)
+            end_time = time.time()
+            
+            # Log LLM timing
+            log_llm_timing("MainDecisionAgent", start_time, end_time, len(prompt))
+            
             logger.info(f"[MainDecision] EXEC - resp: {resp}")
             result = parse_yaml_with_schema(
                 resp,

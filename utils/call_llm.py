@@ -1,5 +1,6 @@
 import os
 import logging
+import re
 from google import genai
 from dotenv import load_dotenv
 load_dotenv()
@@ -15,9 +16,37 @@ if not api_key:
 
 client = genai.Client(api_key=api_key)
 
+
+def estimate_tokens(text: str) -> int:
+    """
+    Estimate token count for Vietnamese and English text.
+    Uses a simple heuristic: ~4 characters per token for Vietnamese, ~3.5 for English.
+    This is a rough approximation for logging purposes.
+    """
+    if not text:
+        return 0
+    
+    # Count Vietnamese characters (with diacritics)
+    vietnamese_chars = len(re.findall(r'[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđĐ]', text))
+    # Count total characters
+    total_chars = len(text)
+    
+    # Rough estimation: Vietnamese text tends to have more tokens per character
+    if vietnamese_chars > total_chars * 0.1:  # If >10% Vietnamese chars
+        estimated_tokens = int(total_chars / 3.2)  # Vietnamese: ~3.2 chars per token
+    else:
+        estimated_tokens = int(total_chars / 3.8)  # English: ~3.8 chars per token
+    
+    return max(1, estimated_tokens)
+
+
 # Learn more about calling the LLM: https://the-pocket.github.io/PocketFlow/utility_function/llm.html
 def call_llm(prompt: str, fast_mode: bool = True) -> str:
     logger.info("🤖 Bắt đầu gọi LLM...")
+    
+    # Log token count before API call
+    estimated_tokens = estimate_tokens(prompt)
+    logger.info(f"📊 Estimated input tokens: {estimated_tokens} (prompt length: {len(prompt)} chars)")
     
     # Dynamic model selection based on fast_mode
     if fast_mode:
@@ -25,6 +54,7 @@ def call_llm(prompt: str, fast_mode: bool = True) -> str:
     else:
         model = os.getenv("GEMINI_MODEL_QUALITY", "gemini-2.5-flash")  # High quality
     
+    logger.info(f"🎯 Using model: {model}")
     
     try:
         logger.info("⏳ Đang gửi request đến Gemini...")
@@ -56,8 +86,11 @@ def call_llm(prompt: str, fast_mode: bool = True) -> str:
                 response_text = "Xin lỗi, không thể tạo response."
         
         if response_text:
+            output_tokens = estimate_tokens(response_text)
             logger.info(f"✅ Nhận được response từ LLM: {len(response_text)} characters")
-            logger.info(f"📤 Response preview: {response_text}")
+            logger.info(f"📊 Estimated output tokens: {output_tokens}")
+            logger.info(f"📤 Response preview: {response_text[:200]}...")
+            logger.info(f"🔍 Full response for debugging: {response_text}")
 
         return response_text or "Xin lỗi, không thể tạo response."
         
