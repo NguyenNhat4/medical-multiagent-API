@@ -14,33 +14,6 @@ from .role_ENUM import RoleEnum
 logger = logging.getLogger(__name__)
 
 
-def log_llm_timing(node_name: str, start_time: float, end_time: float, prompt_length: int = 0):
-    """Log LLM call timing to logs/llm.log file"""
-    import os
-    
-    elapsed_time = end_time - start_time
-    
-    # Ensure logs directory exists
-    os.makedirs('logs', exist_ok=True)
-    
-    # Create a separate logger for LLM timing
-    llm_logger = logging.getLogger('llm_timing')
-    llm_logger.setLevel(logging.INFO)
-    
-    # Create file handler if it doesn't exist
-    if not llm_logger.handlers:
-        file_handler = logging.FileHandler('logs/llm.log', encoding='utf-8')
-        file_handler.setLevel(logging.INFO)
-        
-        # Create formatter
-        formatter = logging.Formatter('%(asctime)s - %(message)s', datefmt='%Y-%m-%d %H:%M:%S')
-        file_handler.setFormatter(formatter)
-        
-        llm_logger.addHandler(file_handler)
-        llm_logger.propagate = True  # Don't propagate to root logger
-    
-    llm_logger.info(f"{node_name} - Duration: {elapsed_time:.4f}s, Prompt: {prompt_length} chars")
-
 
 def format_kb_qa_list(hits: List[Dict[str, Any]], max_items: int = 10) -> str:
     """Format multiple KB hits as a readable Q&A list for prompting.

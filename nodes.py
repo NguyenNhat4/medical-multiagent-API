@@ -12,8 +12,7 @@ from utils.prompts import (
 from utils.helpers import (
     format_kb_qa_list,
     get_score_threshold,
-    format_conversation_history,
-    log_llm_timing
+    format_conversation_history
 )
 from utils.role_ENUM import (
     PERSONA_BY_ROLE
@@ -27,24 +26,6 @@ import time
 
 # Configure logging for this module
 logger = logging.getLogger(__name__)
-
-class AnswerNode(Node):
-    def prep(self, shared):
-        return shared["question"]
-    
-    def exec(self, question):
-        start_time = time.time()
-        result = call_llm(question)
-        end_time = time.time()
-        
-        # Log LLM timing
-        log_llm_timing("AnswerNode", start_time, end_time, len(question))
-        
-        return result
-    
-    def post(self, shared, prep_res, exec_res):
-        shared["answer"] = exec_res
-
 
 
 
@@ -173,7 +154,6 @@ class ComposeAnswer(Node):
             end_time = time.time()
             
             # Log LLM timing
-            log_llm_timing("ComposeAnswer", start_time, end_time, len(prompt))
             
             logger.info(f"✍️ [ComposeAnswer] EXEC - LLM response received")
             result = parse_yaml_with_schema(result, required_fields=["explanation", "suggestion_questions"], field_types={"explanation": str, "suggestion_questions": list})
@@ -303,8 +283,6 @@ class MainDecisionAgent(Node):
             resp = call_llm(prompt)
             end_time = time.time()
             
-            # Log LLM timing
-            log_llm_timing("MainDecisionAgent", start_time, end_time, len(prompt))
             
             logger.info(f"[MainDecision] EXEC - resp: {resp}")
             result = parse_yaml_with_schema(
