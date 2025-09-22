@@ -1,6 +1,7 @@
 import os
 import random
 from typing import List, Dict, Any, Tuple, Optional
+from functools import lru_cache
 import pandas as pd
 import numpy as np
 from sklearn.feature_extraction.text import TfidfVectorizer
@@ -145,6 +146,8 @@ class KnowledgeBaseIndex:
                     ngram_range=(1, 2),
                     min_df=1,
                     max_df=0.95,
+                    sublinear_tf=True,
+                    dtype=np.float32,
                 )
                 role_matrix = role_vectorizer.fit_transform(role_df["combined_norm"])
                 
@@ -181,6 +184,8 @@ class KnowledgeBaseIndex:
             ngram_range=(1, 2),
             min_df=1,
             max_df=0.95,
+            sublinear_tf=True,
+            dtype=np.float32,
         )
         self.matrix = self.vectorizer.fit_transform(self.df["combined_norm"])  # type: ignore[arg-type]
 
@@ -210,8 +215,16 @@ class KnowledgeBaseIndex:
         
         q = _normalize_accents(_normalize_text(query))
         q_vec = vectorizer.transform([q])
-        sims = cosine_similarity(q_vec, matrix).ravel()
-        idx = sims.argsort()[::-1][:top_k]
+        # Fast cosine via L2-normalized TF-IDF: dot product == cosine
+        # Keep computation in sparse and only densify the 1xN result vector
+        sims_sparse = q_vec @ matrix.T
+        sims = sims_sparse.toarray().ravel()
+        if sims.size == 0:
+            return []
+        k = int(min(top_k, sims.shape[0]))
+        # Use argpartition for O(n) top-k selection, then sort those k
+        idx_part = np.argpartition(sims, -k)[-k:]
+        idx = idx_part[np.argsort(sims[idx_part])[::-1]]
         
         results: List[Dict[str, Any]] = []
         for i in idx:
@@ -283,9 +296,19 @@ def get_kb() -> KnowledgeBaseIndex:
     return _KB_INDEX
 
 
-def retrieve(query: str, role: Optional[str] = None, top_k: int = 5) -> Tuple[List[Dict[str, Any]], float]:
+@lru_cache(maxsize=4096)
+def _cached_search(query: str, role: Optional[str], top_k: int) -> Tuple[Tuple[Tuple[str, Any], ...], ...]:
+    """Cacheable wrapper for KB search returning a hashable structure."""
     kb = get_kb()
     results = kb.search(query, role=role, top_k=top_k)
+    # Convert list[dict] to tuple of sorted tuples for hashing
+    return tuple(tuple(sorted(item.items())) for item in results)
+
+
+def retrieve(query: str, role: Optional[str] = None, top_k: int = 5) -> Tuple[List[Dict[str, Any]], float]:
+    # Use cached results to avoid recomputation for identical queries
+    cached = _cached_search(query, role, top_k)
+    results: List[Dict[str, Any]] = [dict(items) for items in cached]
     score = results[0]["score"] if results else 0.0
     return results, score
 

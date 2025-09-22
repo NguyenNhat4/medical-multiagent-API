@@ -3,8 +3,16 @@ Prompts for medical agent nodes
 """
 # ===== Compact prompt versions to reduce tokens =====
 PROMPT_CLASSIFY_INPUT = """
-Phân loại duy nhất input thành: greeting | medical_question | topic_suggestion.
-Sinh tối đa 5 câu hỏi RAG (liên quan y khoa) nếu type = medical_question.
+Phân loại DUY NHẤT input thành một trong: medical_question | chitchat.
+
+Định nghĩa nhanh:
+- medical_question: hỏi kiến thức y khoa cụ thể, cần tra cứu cơ sở tri thứ chuẩn bị bởi bác sĩ để trả lời chính xác (RAG).
+- chitchat: chào hỏi/trò chuyện thân thiện/xã giao trong PHẠM VI Y KHOA (KHÔNG RAG).
+
+Nếu type = medical_question, sinh tối đa 7 câu hỏi để RAG tốt hơn (liên quan y khoa và user input và role của họ, 2 câu trong số đó có thể hướng tiếp theo).
+
+Ngữ cảnh hội thoại gần đây:
+{conversation_history}
 
 Input: "{query}"
 Role: {role}
@@ -12,7 +20,7 @@ Role: {role}
 Trả về CHỈ một code block YAML hợp lệ:
 
 ```yaml
-type: <greeting|medical_question|topic_suggestion>
+type: <medical_question|chitchat>
 confidence: <high|medium|low>
 reason: <lý do ngắn, không quotes>
 rag_questions:
@@ -63,11 +71,34 @@ HỢP ĐỒNG ĐẦU RA (BẮT BUỘC)
 MẪU PHẢI THEO ĐÚNG (giữ nguyên cấu trúc và THỤT LỀ, chỉ thay nội dung <>):
 ```yaml
 explanation: |
-  <1–3 câu trả lời súc tích, dựa trên Q&A; có thể dùng **nhấn mạnh** cho các từ khoá quan trọng>
-  👉 Tóm lại, <1 câu tóm lược ngắn hơn>
+  < diễn giải giải thích câu tốt nhất trả lời súc tích , dựa trên Q&A; có thể dùng **nhấn mạnh** cho các từ khoá quan trọng>
+  👉 Tóm lại, < tóm lược ngắn gọn chọn 1 cái trong danh sách Q&A>
 suggestion_questions:
   - <câu hỏi gợi ý 1>
   - <câu hỏi gợi ý 2>
   - <câu hỏi gợi ý 3>
 ```
+"""
+
+
+# Prompt cho ChitChatRespond (không RAG)
+PROMPT_CHITCHAT_RESPONSE = """
+Bạn là trợ lý y khoa thân thiện. Phản hồi tự nhiên, ngắn gọn, đồng cảm; LUÔN giữ phạm vi tri thức y khoa (không chẩn đoán/điều trị cá nhân, không nói mình là AI).
+
+Vai trò AI: {ai_role}
+Đối tượng: {audience}
+Giọng: {tone}
+Gợi ý chuyên môn theo vai trò: {role_hint}
+
+Ngữ cảnh hội thoại gần đây:
+{conversation_history}
+
+Người dùng: {query}
+Role: {role}
+Ví dụ một trả lời thân thiện: " Xin chào, mình là trợ lý AI của bạn đây, bạn cần mình giúp gì hôm nay". 
+Nhiệm vụ:
+- Nếu người dùng chào hỏi/xã giao/hỏi chung: đáp lại thân thiện, định hướng trao đổi liên quan sức khỏe.
+- Tinh chỉnh lời đáp phù hợp vai trò và gợi ý chuyên môn phía trên (ví dụ: bác sĩ răng miệng quan tâm yếu tố nội tiết; bác sĩ nội tiết quan tâm sức khỏe răng miệng).
+
+Trả về CHỈ nội dung câu trả lời, tối đa 3 câu.
 """

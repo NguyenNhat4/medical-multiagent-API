@@ -1,7 +1,8 @@
 from pocketflow import Flow
 from nodes import (
     IngestQuery, MainDecisionAgent, ScoreDecisionNode, RetrieveFromKB, 
-    ComposeAnswer, TopicSuggestResponse, ClarifyQuestionNode, GreetingResponse, FallbackNode
+    ComposeAnswer, ClarifyQuestionNode, GreetingResponse, FallbackNode,
+    ChitChatRespond,
 )
 import logging
 
@@ -17,10 +18,10 @@ def create_med_agent_flow():
     retrieve_kb = RetrieveFromKB()
     score_decision = ScoreDecisionNode()
     compose_answer = ComposeAnswer()
-    topic_suggest = TopicSuggestResponse()
     clarify_question = ClarifyQuestionNode()
     greeting = GreetingResponse()
     fallback = FallbackNode()
+    chitchat = ChitChatRespond()
     logger.info("[Flow] Kết nối nodes theo luồng mới")
     
     # Main flow: Ingest → MainDecision
@@ -28,19 +29,21 @@ def create_med_agent_flow():
     
     # From MainDecision, route based on classification
     main_decision - "retrieve_kb" >> retrieve_kb
-    main_decision - "topic_suggest" >> topic_suggest
+    # main_decision no longer routes directly to topic_suggest
     main_decision - "greeting" >> greeting
+    main_decision - "chitchat" >> chitchat
     main_decision - "fallback" >> fallback
     # From RetrieveKB, check score and decide
     retrieve_kb >> score_decision
     
     # From ScoreDecision, route to appropriate action
     score_decision - "compose_answer" >> compose_answer
-    score_decision - "topic_suggest" >> topic_suggest
     score_decision - "clarify" >> clarify_question
     
     # From ComposeAnswer, route to fallback if API overloaded
     compose_answer - "fallback" >> fallback
+    
+    # ChitChatRespond is terminal for non-RAG cases
     
    
     flow = Flow(start=ingest)

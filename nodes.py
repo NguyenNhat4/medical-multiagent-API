@@ -7,7 +7,8 @@ from utils.kb import retrieve, retrieve_random_by_role
 from utils.response_parser import parse_yaml_response, validate_yaml_structure, parse_yaml_with_schema
 from utils.prompts import (
     PROMPT_CLASSIFY_INPUT, 
-    PROMPT_COMPOSE_ANSWER
+    PROMPT_COMPOSE_ANSWER,
+    PROMPT_CHITCHAT_RESPONSE,
 )
 from utils.helpers import (
     format_kb_qa_list,
@@ -100,18 +101,72 @@ class RetrieveFromKB(Node):
         return "default" 
 
 class GreetingResponse(Node):
-    """Node xử lý chào hỏi - set context và route đến topic suggestion"""
-    def prep(self, shared):
-        return shared.get("role", ""), shared.get("query", "")
-    
-    def exec(self, inputs):
-        role, query = inputs
-        return {"context_set": True, "role": role, "query": query}
-    
+    """Deprecated: Chào hỏi được gom vào ChitChatRespond."""
     def post(self, shared, prep_res, exec_res):
-        shared["explain"] = "Xin chào 😊! Tôi là trợ lý AI của bạn. Rất vui được hỗ trợ bạn - Bạn cần tôi giúp gì hôm nay? "
         return "default"
 
+
+class ChitChatRespond(Node):
+    """Node xử lý tất cả trường hợp không cần RAG (bao gồm chào hỏi)."""
+
+    def prep(self, shared):
+        role = shared.get("role", "")
+        query = shared.get("query", "")
+        conversation_history = shared.get("conversation_history", [])
+        return role, query, conversation_history
+
+    def exec(self, inputs):
+        role, query, conversation_history = inputs
+        # Lấy 3 tin gần nhất
+        history_lines = []
+        for msg in conversation_history[-3:]:
+            try:
+                who = msg.get("role")
+                content = msg.get("content", "")
+                history_lines.append(f"- {who}: {content}")
+            except Exception:
+                continue
+        formatted_history = "\n".join(history_lines)
+
+        # Lấy persona theo role (fallback an toàn)
+        if role in PERSONA_BY_ROLE:
+            persona = PERSONA_BY_ROLE[role]
+            ai_role = persona.get('persona', 'Trợ lý y khoa')
+            audience = persona.get('audience', 'người dùng phổ thông')
+            tone = persona.get('tone', 'thân thiện, rõ ràng')
+        else:
+            ai_role, audience, tone = 'Trợ lý y khoa', 'người dùng phổ thông', 'thân thiện, rõ ràng'
+
+        # Gợi ý chuyên môn theo vai trò bác sĩ
+        role_lower = (role or '').lower()
+        if 'doctor_dental' in role_lower:
+            role_hint = 'Lưu ý đến mối liên hệ với nội tiết/chuyển hóa (ví dụ đái tháo đường) khi tư vấn sức khỏe răng miệng.'
+        elif 'doctor_endocrine' in role_lower:
+            role_hint = 'Lưu ý đến sức khỏe răng miệng (viêm nha chu, sâu răng) có thể ảnh hưởng kiểm soát đường huyết.'
+        else:
+            role_hint = 'Giữ phạm vi y khoa tổng quát, thân thiện, định hướng người dùng đặt câu hỏi rõ ràng hơn.'
+
+        prompt = PROMPT_CHITCHAT_RESPONSE.format(
+            conversation_history=formatted_history,
+            query=query,
+            role=role,
+            ai_role=ai_role,
+            audience=audience,
+            tone=tone,
+            role_hint=role_hint,
+        )
+
+        try:
+            resp = call_llm(prompt)
+        except APIOverloadException:
+            resp = "Cảm ơn bạn đã chia sẻ. Mình luôn sẵn sàng hỗ trợ về thông tin y khoa nếu bạn cần nhé!"
+
+        return {"reply": resp}
+
+    def post(self, shared, prep_res, exec_res):
+        shared["answer_obj"] = {"explain": exec_res.get("reply", ""), "preformatted": True}
+        shared["explain"] = exec_res.get("reply", "")
+        return "default"
 
 class ComposeAnswer(Node):
     def prep(self, shared):
@@ -230,36 +285,6 @@ class ClarifyQuestionNode(Node):
         return "default"
 
 
-class TopicSuggestResponse(Node):
-    """Node xử lý gợi ý topic khi user yêu cầu gợi ý chủ đề"""
-    def prep(self, shared):
-        role = shared.get("role", "")
-        query = shared.get("query", "")
-        logger.info(f"[TopicSuggestResponse] PREP - Role: {role}, Query: '{query[:50]}...'")
-        return role, query
-    
-    def exec(self, inputs):
-        role, query = inputs
-        logger.info(f"[TopicSuggestResponse] EXEC - Generating topic suggestions for role: {role}")
-        
-        # Get fewer topic suggestions to reduce tokens
-        suggestion_questions = [q['cau_hoi'] for q in retrieve_random_by_role(role, amount=5)]
-        
-        result = {
-            "explain": "Mình gợi ý bạn các chủ đề sau nhé! Bạn có thể chọn bất kỳ chủ đề nào mà bạn quan tâm 😊",
-            "suggestion_questions": suggestion_questions,
-            "preformatted": True,
-        }
-        
-        logger.info(f"[TopicSuggestResponse] EXEC - Generated {len(suggestion_questions)} topic suggestions")
-        return result
-    
-    def post(self, shared, prep_res, exec_res):
-        logger.info("[TopicSuggestResponse] POST - Lưu topic suggestion response")
-        shared["answer_obj"] = exec_res
-        shared["explain"] = exec_res.get("explain", "")
-        shared["suggestion_questions"] = exec_res.get("suggestion_questions", [])
-        return "default"
 
 
 
@@ -271,17 +296,26 @@ class MainDecisionAgent(Node):
         logger.info("[MainDecision] PREP - Đọc query để phân loại")
         query = shared.get("query", "").strip()
         role = shared.get("role", "")
-        return query, role
+        conversation_history = shared.get("conversation_history", [])
+        # Lấy 3 tin gần nhất
+        history_lines = []
+        for msg in conversation_history[-3:]:
+            try:
+                who = msg.get("role")
+                content = msg.get("content", "")
+                history_lines.append(f"- {who}: {content}")
+            except Exception:
+                continue
+        formatted_history = "\n".join(history_lines)
+        return query, role, formatted_history
     
     def exec(self, inputs):
-        query, role = inputs
+        query, role, formatted_history = inputs
         logger.info("[MainDecision] EXEC - Using LLM for classification")
-        prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role)
+        prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role, conversation_history=formatted_history)
         
         try:
-            start_time = time.time()
             resp = call_llm(prompt)
-            end_time = time.time()
             
             
             logger.info(f"[MainDecision] EXEC - resp: {resp}")
@@ -316,12 +350,13 @@ class MainDecisionAgent(Node):
         
         if input_type == "medical_question":
             return "retrieve_kb"
-        elif input_type == "greeting":
-            return "greeting"
+        elif input_type == "chitchat":
+            return "chitchat"
         elif input_type == "api_overload" or input_type == "default":
             return "fallback"
         else:
-            return "topic_suggest"
+            # Mặc định không đẩy sang topic_suggest nữa
+            return "chitchat"
 
 
 class FallbackNode(Node):
@@ -417,10 +452,9 @@ class ScoreDecisionNode(Node):
 
             if retrieval_score >= score_threshold:
                 return {"action": "compose_answer", "context": "medical_high_score"}
-            else:
-                return {"action": "clarify", "context": "medical_low_score"}
+          
             
-        return {"action": "clarify", "context": "topic_suggestion"}
+        return {"action": "clarify", "context": "default_fallback"}
    
     def post(self, shared, prep_res, exec_res):
         shared["response_context"] = exec_res["context"]
