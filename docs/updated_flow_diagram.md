@@ -6,20 +6,27 @@
 flowchart TD
     start[IngestQuery] --> main[MainDecisionAgent]
     
+    %% Branches from MainDecisionAgent
     main -->|retrieve_kb| retrieve[RetrieveFromKB]
     main -->|topic_suggest| topic[TopicSuggestResponse]
     main -->|greeting| greeting[GreetingResponse]
+    main -->|fallback| fallback[FallbackNode]
     
+    %% Retrieval path
     retrieve --> score[ScoreDecisionNode]
-    
     score -->|compose_answer| compose[ComposeAnswer]
-
     score -->|clarify| clarify[ClarifyQuestionNode]
+    score -->|topic_suggest| topic
     
-    compose --> End
+    %% Compose may fallback on API overload
+    compose -->|fallback| fallback
+    
+    %% Terminal states
     topic --> End
     clarify --> End
     greeting --> End
+    fallback --> End
+    compose --> End
 ```
 
 ## Key Changes Made
@@ -42,8 +49,10 @@ flowchart TD
 - **Questions**: Shows 10 topic suggestions for broad exploration
 
 ### 4. **Updated Flow Routing**
-- Added new routing path: `score_decision - "clarify" >> clarify_question`
-- All response types now properly route to logging
+- Thêm route mới: `score_decision - "clarify" >> clarify_question`
+- Thêm nhánh: `main_decision - "fallback" >> fallback`
+- Thêm cạnh: `score_decision - "topic_suggest" >> topic_suggest`
+- `compose_answer - "fallback" >> fallback` khi API quá tải
 
 ## User Experience Improvements
 
