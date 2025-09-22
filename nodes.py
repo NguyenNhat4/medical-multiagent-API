@@ -74,14 +74,10 @@ class RetrieveFromKB(Node):
         logger.info(f"📚 [RetrieveFromKB] EXEC - Query: {search_term}")
         import time
 
-        start_time = time.time()
         # Reduce retrieval breadth
         results, score = retrieve(search_term, user_role, top_k=5)
-        elapsed_time = time.time() - start_time
 
-        # Log elapsed time to a file
-        with open("retrieve_timing.log", "a", encoding="utf-8") as f:
-            f.write(f" Time: {elapsed_time:.4f} seconds\n")
+     
         logger.info(f"📚 [RetrieveFromKB] EXEC - Retrieved results: {results} , best score: {score:.4f}")
         return results, score
 
