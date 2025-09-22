@@ -16,6 +16,8 @@ Ngữ cảnh hội thoại gần đây:
 
 Input: "{query}"
 Role: {role}
+QUAN TRỌNG: 
+- câu hỏi trong rag_questions không có dấu :
 
 Trả về CHỈ một code block YAML hợp lệ:
 
@@ -24,9 +26,9 @@ type: <medical_question|chitchat>
 confidence: <high|medium|low>
 reason: <lý do ngắn, không quotes>
 rag_questions:
-  - <câu hỏi 1>
-  - <câu hỏi 2>
-  - <câu hỏi 3>
+  - "câu hỏi 1"
+  - "câu hỏi 2" 
+  - "câu hỏi 3"
 ```
 """
 
