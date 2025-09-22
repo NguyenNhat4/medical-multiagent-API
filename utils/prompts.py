@@ -17,7 +17,8 @@ Ngữ cảnh hội thoại gần đây:
 Input: "{query}"
 Role: {role}
 QUAN TRỌNG: 
-- câu hỏi trong rag_questions không có dấu :
+- câu hỏi trong rag_questions không có dấu : 
+- đảm bảo yaml trả về có thể parse được
 
 Trả về CHỈ một code block YAML hợp lệ:
 
