@@ -42,6 +42,8 @@ def create_med_agent_flow():
     
     # From ComposeAnswer, route to fallback if API overloaded
     compose_answer - "fallback" >> fallback
+    # From ChitChat, route to fallback if API overloaded
+    chitchat - "fallback" >> fallback
     
     # ChitChatRespond is terminal for non-RAG cases
     
