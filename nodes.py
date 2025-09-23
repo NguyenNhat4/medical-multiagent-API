@@ -2,7 +2,7 @@ from math import log
 from unittest import result
 from pocketflow import Node
 from utils.call_llm import call_llm, APIOverloadException
-from utils.kb import retrieve, retrieve_random_by_role
+from utils.kb import retrieve, retrieve_random_by_role, get_kb, ROLE_TO_CSV
 
 from utils.response_parser import parse_yaml_response, validate_yaml_structure, parse_yaml_with_schema
 from utils.prompts import (
@@ -22,6 +22,7 @@ from typing import Any, Dict, List, Tuple
 import textwrap
 import yaml
 import logging
+from unidecode import unidecode
 import re
 import time
 
@@ -149,13 +150,17 @@ class ChitChatRespond(Node):
         try:
             resp = call_llm(prompt)
         except APIOverloadException:
+            # Đánh dấu API overload để route sang fallback
             resp = "Cảm ơn bạn đã chia sẻ. Mình luôn sẵn sàng hỗ trợ về thông tin y khoa nếu bạn cần nhé!"
+            return {"reply": resp, "api_overload": True}
 
-        return {"reply": resp}
+        return {"reply": resp, "api_overload": False}
 
     def post(self, shared, prep_res, exec_res):
         shared["answer_obj"] = {"explain": exec_res.get("reply", ""), "preformatted": True}
         shared["explain"] = exec_res.get("reply", "")
+        if exec_res.get("api_overload", False):
+            return "fallback"
         return "default"
 
 class ComposeAnswer(Node):
@@ -356,42 +361,136 @@ class FallbackNode(Node):
         logger.info("🔄 [FallbackNode] PREP - Xử lý fallback khi API quá tải")
         query = shared.get("query", "")
         role = shared.get("role", "")
-        return query, role
+        rag_questions = shared.get("rag_questions", [])
+        return query, role, rag_questions
     
     def exec(self, inputs):
-        query, role = inputs
-        logger.info(f"🔄 [FallbackNode] EXEC - Retrieve từ query: '{query[:50]}...' cho role: {role}")
+        query, role, rag_questions = inputs
+        logger.info(f"🔄 [FallbackNode] EXEC - Fallback search cho role: {role} với query: '{query[:50]}...', rag_questions: {len(rag_questions) if rag_questions else 0}")
         
         try:
-            # Retrieve từ knowledge base
-            results, score = retrieve(query, role, top_k=5)
-            logger.info(f"🔄 [FallbackNode] EXEC - Retrieved {len(results)} results, best score: {score:.4f}")
-            logger.info(f"🔄 [FallbackNode] EXEC - Results: {results}")
-            # Kiểm tra score threshold
-            if score > 0.35:
-                # Có kết quả tốt - lấy câu trả lời có score cao nhất
-                best_answer = results[0] if results else None
-                if best_answer:
-                    explain = best_answer.get("cau_tra_loi", "")
-                    # Lấy thêm câu hỏi gợi ý từ kết quả retrieve
-                    suggestion_questions = [item.get('cau_hoi', '') for item in results[1:4] if item.get('cau_hoi')]
-                else:
-                    explain = "Xin lỗi, không thể lấy được thông tin phù hợp lúc này."
-                    suggestion_questions = []
+            # 1) Tìm tuần tự trong CSV theo role, so khớp HOÀN TOÀN với cột CÂU HỎI
+            kb = get_kb()
+            role_lower = (role or "").lower()
+            role_csv = ROLE_TO_CSV.get(role_lower)
+
+            def _norm_text(s: str) -> str:
+                s = unidecode((s or "").lower())
+                return " ".join(s.split())
+
+            q_norm = _norm_text(query)
+            exact_matches = []
+
+            if role_csv and role_csv in kb.role_dataframes:
+                df = kb.role_dataframes[role_csv]
+                for _, row in df.iterrows():
+                    q_text = str(row.get("CÂU HỎI", ""))
+                    a_text = str(row.get("CÂU  TRẢ    LỜI", ""))
+                    qn = _norm_text(q_text)
+                    if qn and q_norm and qn == q_norm:
+                        exact_matches.append({
+                            "cau_hoi": q_text,
+                            "cau_tra_loi": a_text,
+                            "de_muc": row.get("ĐỀ MỤC", ""),
+                            "chu_de_con": row.get("CHỦ  ĐỀ  CON", ""),
+                            "ma_so": row.get("MÃ SỐ", ""),
+                            "keywords": row.get("keywords", ""),
+                        })
+
+            # Build retrieval queries: user input first, then rag_questions (if any)
+            retrieval_queries = []
+            if query:
+                retrieval_queries.append(query)
+            if rag_questions:
+                retrieval_queries.extend([q for q in rag_questions if q])
+
+            # Aggregate retrievals across queries, deduplicate by ma_so or normalized question
+            aggregated: List[Dict[str, Any]] = []
+            for rq in retrieval_queries:
+                try:
+                    res, sc = retrieve(rq, role, top_k=5)
+                    logger.info(f"🔄 [FallbackNode] EXEC - Retrieve for '{rq[:40]}...': {len(res) if res else 0} results, best score: {sc if res else 0.0:.4f}")
+                    if res:
+                        aggregated.extend(res)
+                except Exception:
+                    continue
+
+            # Deduplicate and keep highest score per key
+            seen_max: Dict[str, Dict[str, Any]] = {}
+            def _key(item: Dict[str, Any]) -> str:
+                return item.get('ma_so') or _norm_text(item.get('cau_hoi', ''))
+
+            for it in aggregated:
+                k = _key(it)
+                if not k:
+                    continue
+                cur = seen_max.get(k)
+                if cur is None or float(it.get('score', 0.0)) > float(cur.get('score', 0.0)):
+                    seen_max[k] = it
+
+            uniq: List[Dict[str, Any]] = list(seen_max.values())
+            uniq.sort(key=lambda x: x.get('score', 0.0), reverse=True)
+            top5: List[Dict[str, Any]] = uniq[:5]
+
+            try:
+                formatted = format_kb_qa_list(top5, max_items=5)
+                if formatted:
+                    logger.info("\n📚 [FallbackNode] RETRIEVE - Aggregated Results (Top 5):\n" + formatted)
+            except Exception:
+                pass
+
+            # Log thêm bảng điểm cho top5
+            if top5:
+                lines = ["\n🏷️ [FallbackNode] TOP-5 SCORES (desc):"]
+                for i, it in enumerate(top5, 1):
+                    q = str(it.get('cau_hoi', ''))
+                    sc = float(it.get('score', 0.0))
+                    lines.append(f"  {i}. score={sc:.4f} | Q: {q[:140]}")
+                logger.info("\n".join(lines))
+
+            if exact_matches:
+                best = exact_matches[0]
+                explain = best.get("cau_tra_loi", "")
+                # Suggestions: top4 từ retrieve (khác câu exact match)
+                suggestion_questions = []
+                exact_q_norm = _norm_text(best.get("cau_hoi", ""))
+                for it in top5:
+                    q = it.get('cau_hoi', '')
+                    if q and _norm_text(q) != exact_q_norm:
+                        suggestion_questions.append(q)
+                        if len(suggestion_questions) >= 4:
+                            break
+                score = 1.0
+                # Log lựa chọn cuối
+                logger.info("\n✅ [FallbackNode] EXPLAIN (exact match): score=1.0000 | Q (exact): " + str(best.get("cau_hoi", ""))[:140])
+                if suggestion_questions:
+                    # map score theo câu hỏi để log
+                    score_map = {str(it.get('cau_hoi', '')): float(it.get('score', 0.0)) for it in top5}
+                    sug_lines = ["📌 [FallbackNode] SUGGESTIONS (top4):"]
+                    for idx, sq in enumerate(suggestion_questions, 1):
+                        sug_lines.append(f"  {idx}. score={score_map.get(sq, 0.0):.4f} | Q: {sq[:140]}")
+                    logger.info("\n".join(sug_lines))
             else:
-                # Score thấp - trả về thông báo mặc định + câu hỏi gợi ý từ retrieve
-                explain = "Hiện tại mình chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!"
-                # Lấy câu hỏi gợi ý từ kết quả retrieve (nếu có), fallback sang random nếu không có
-                if results and len(results) > 0:
-                    suggestion_questions = [item.get('cau_hoi', '') for item in results if item.get('cau_hoi')][:5]
-                    # Nếu không đủ câu hỏi từ retrieve, bổ sung thêm từ random
-                    if len(suggestion_questions) < 3:
-                        random_questions = retrieve_random_by_role(role, amount=5-len(suggestion_questions))
-                        suggestion_questions.extend([q['cau_hoi'] for q in random_questions])
+                # Không có exact match: nếu có top5, dùng top1 làm explain và còn lại làm suggestion
+                if top5:
+                    best_answer = top5[0]
+                    explain = best_answer.get("cau_tra_loi", "")
+                    suggestion_questions = [it.get('cau_hoi', '') for it in top5[1:5] if it.get('cau_hoi')]
+                    score = float(best_answer.get('score', 0.0))
+                    # Log lựa chọn cuối
+                    logger.info(f"\n✅ [FallbackNode] EXPLAIN (retrieve top1): score={score:.4f} | Q: {str(best_answer.get('cau_hoi',''))[:140]}")
+                    if suggestion_questions:
+                        sug_lines = ["📌 [FallbackNode] SUGGESTIONS (next4):"]
+                        for idx, it in enumerate(top5[1:5], 1):
+                            if not it.get('cau_hoi'):
+                                continue
+                            sug_lines.append(f"  {idx}. score={float(it.get('score', 0.0)):.4f} | Q: {str(it.get('cau_hoi'))[:140]}")
+                        logger.info("\n".join(sug_lines))
                 else:
-                    # Không có kết quả retrieve, dùng random
+                    explain = "Hiện tại mình chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!"
                     random_questions = retrieve_random_by_role(role, amount=5)
                     suggestion_questions = [q['cau_hoi'] for q in random_questions]
+                    score = 0.0
             
             result = {
                 "explain": explain,
