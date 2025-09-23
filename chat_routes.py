@@ -88,7 +88,7 @@ async def create_thread(
         )
 
 
-@router.get("/threads/{thread_id}/messages", response_model=ThreadMessagesResponse)
+@router.get("/{thread_id}/messages", response_model=ThreadMessagesResponse)
 async def get_thread_messages(
     thread_id: str,
     page: int = 1,

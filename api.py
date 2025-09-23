@@ -11,8 +11,8 @@ from fastapi.security import OAuth2PasswordRequestForm
 from pydantic import BaseModel, Field, EmailStr
 from passlib.hash import bcrypt
 from sqlalchemy.orm import Session
-from database.db import get_db, Users, ChatMessage, ChatThreads
-from database.models import ChatThread
+from database.db import get_db
+from database.models import Users, ChatMessage, ChatThread
 from typing import Optional, List, Dict, Any
 import logging
 from datetime import datetime
@@ -143,9 +143,6 @@ class LoginReq(BaseModel):
     email: EmailStr
     password: str
 
-class GoogleLoginReq(BaseModel):
-    googleIdToken: str
-
 
 @router.post("/auth/google", response_model=TokenResponse)
 def login_with_google(payload: GoogleLoginReq, db: Session = Depends(get_db)):
@@ -187,9 +184,6 @@ def login_with_google(payload: GoogleLoginReq, db: Session = Depends(get_db)):
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=f"Invalid Google token: {e}")
-    except ValueError as ve:
-        # Token verification failed
-        raise HTTPException(status_code=401, detail=f"Invalid Google token: {str(ve)}")
     except Exception as e:
         logger.error(f"Error in Google login: {str(e)}")
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -211,8 +205,8 @@ class ConversationRequest(BaseModel):
         default=RoleEnum.PATIENT_DENTAL.value,
         description="User's role in the medical context (can be role name or role ID)",
     )
-    session_id: Optional[str] = Field(
-        None, description="Session identifier for conversation tracking"
+    session_id: str = Field(
+        ..., description="Session identifier for conversation tracking"
     )
 
 
@@ -257,18 +251,6 @@ class UserCreate(BaseModel):
 class LoginReq(BaseModel):
     email: EmailStr
     password: str
-
-
-class UserOut(BaseModel):
-    id: int
-    email: str
-    name: Optional[str] = None
-    avatar: Optional[str] = None
-    
-class TokenResponse(BaseModel):
-    access_token: str
-    token_type: str
-    user: UserOut
 
 
 class DeleteUserResponse(BaseModel):
@@ -332,7 +314,6 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
 
 
 from utils.auth import create_access_token, Token, get_current_user
-from fastapi.security import OAuth2PasswordRequestForm
 
 @router.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginReq, db: Session = Depends(get_db)):
@@ -464,7 +445,7 @@ async def chat(
 
     - **message**: User's input message
     - **role**: User's role in medical context
-    - **session_id**: Optional session identifier (thread_id from database)
+    - **session_id**: Required session identifier (thread_id from database)
     
     Requires authentication via JWT token
     """
@@ -488,7 +469,7 @@ async def chat(
 
         # Lấy 3 cặp gần nhất (tối đa 6 messages: user-bot)
         if thread:
-            thread.messages = sorted(thread.messages, key=lambda m: m.timestamp, reverse=True)[:6][::-1]
+            recent_messages = sorted(thread.messages, key=lambda m: m.timestamp, reverse=True)[:6][::-1]
         if not thread:
             raise HTTPException(
                 status_code=404,
@@ -521,7 +502,7 @@ async def chat(
         # Defer DB writes to a single transaction later
 
         # Serialize conversation history for the flow
-        conversation_history = serialize_conversation_history(thread.messages)
+        conversation_history = serialize_conversation_history(recent_messages)
 
         # Prepare shared data for the flow
         shared = {
