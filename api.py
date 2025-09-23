@@ -518,7 +518,7 @@ async def chat(
         
         explanation = shared.get("explain")
         if not explanation or not isinstance(explanation, str) or not explanation.strip():
-            explanation = "Xin lỗi, mình không thể trả lời câu hỏi ngay lúc này. Bạn chờ một xíu rồi và thử gửi lại câu hỏi cho mình nhé!"
+            explanation = "Xin lỗi, tôi không thể trả lời câu hỏi ngay lúc này. Bạn chờ một xíu rồi và thử gửi lại câu hỏi cho tôi nhé!"
         suggestion_questions = shared.get("suggestion_questions", [])
         input_type = shared.get("input_type")
         need_clarify = shared.get("need_clarify", False)

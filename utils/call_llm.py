@@ -240,11 +240,11 @@ def call_llm(prompt: str, fast_mode: bool = True) -> str:
             else:
                 # For other errors, don't mark key as failed, just return fallback
                 logger.warning("⚠️ Unexpected API error. Using fallback response.")
-                return "Xin lỗi hiện tại mình đang bị quá tải bạn chờ một chút nhé."
+                return "Xin lỗi hiện tại tôi đang bị quá tải bạn chờ một chút nhé."
     
     # If we've exhausted all retries
     logger.error("❌ Exhausted all API key retries")
-    return "Xin lỗi hiện tại mình đang bị quá tải bạn chờ một chút nhé."
+    return "Xin lỗi hiện tại tôi đang bị quá tải bạn chờ một chút nhé."
 
 if __name__ == "__main__":
     test_prompt = "Hello, how are you?"

@@ -305,7 +305,7 @@ class ClarifyQuestionNode(Node):
         
         
         result = {
-            "explain": "Hiện tại mình chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!",
+            "explain": "Hiện tại tôi chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!",
             "suggestion_questions": suggestion_questions,
             "preformatted": True,
         }
@@ -528,7 +528,7 @@ class FallbackNode(Node):
                             sug_lines.append(f"  {idx}. score={float(it.get('score', 0.0)):.4f} | Q: {str(it.get('cau_hoi'))[:140]}")
                         logger.info("\n".join(sug_lines))
                 else:
-                    explain = "Hiện tại mình chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!"
+                    explain = "Hiện tại tôi chưa có đủ thông tin liên quan để trả lời câu hỏi này của bạn, Bạn có thể đặt lại câu hỏi khác hoặc diễn đạt lại câu hỏi của bạn! Hoặc bạn có thể chọn các câu hỏi gợi ý dưới đây!"
                     random_questions = retrieve_random_by_role(role, amount=5)
                     suggestion_questions = [q['cau_hoi'] for q in random_questions]
                     score = 0.0
