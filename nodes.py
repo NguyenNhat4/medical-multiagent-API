@@ -59,28 +59,70 @@ class IngestQuery(Node):
 
 class RetrieveFromKB(Node):
     def prep(self, shared):
-        logger.info("📚 [RetrieveFromKB] PREP - Đọc query và rag_questions để retrieve")
+        logger.info("📚 [RetrieveFromKB] PREP - Đọc query và danh sách rag_questions để retrieve tuần tự")
         query = shared.get("query", "")
         rag_questions = shared.get("rag_questions", [])
-        # Kết hợp query gốc với các câu hỏi RAG để tìm kiếm toàn diện hơn
-        all_queries = [query] + rag_questions
-        search_term = " ".join(all_queries)   
         user_role =  shared.get("role", "")
-        logger.info(f"📚 [RetrieveFromKB] PREP - Search Term: '{search_term[:100]}...'")
-        return search_term, user_role
+        logger.info(f"📚 [RetrieveFromKB] PREP - query='{str(query)[:80]}...', rag_questions={len(rag_questions) if rag_questions else 0}")
+        return query, rag_questions, user_role
 
     def exec(self, inputs):
-        search_term, user_role = inputs
-        logger.info("📚 [RetrieveFromKB] EXEC - Bắt đầu retrieve từ knowledge base")
-        logger.info(f"📚 [RetrieveFromKB] EXEC - Query: {search_term}")
-        import time
+        query, rag_questions, user_role = inputs
+        logger.info("📚 [RetrieveFromKB] EXEC - Bắt đầu retrieve tuần tự: user input trước, sau đó RAG")
 
-        # Reduce retrieval breadth
-        results, score = retrieve(search_term, user_role, top_k=5)
+        # Xây danh sách truy vấn: ưu tiên user input trước, rồi đến rag_questions
+        retrieval_queries = []
+        if query:
+            retrieval_queries.append(query)
+        if rag_questions:
+            retrieval_queries.extend([q for q in rag_questions if q])
 
-     
-        logger.info(f"📚 [RetrieveFromKB] EXEC - Retrieved results: {results} , best score: {score:.4f}")
-        return results, score
+        aggregated = []
+        best_seen_score = 0.0
+        for rq in retrieval_queries:
+            res, sc = retrieve(rq, user_role, top_k=5)
+            logger.info(f"📚 [RetrieveFromKB] EXEC - Retrieve for '{rq[:60]}...': n={len(res) if res else 0}, best={sc if res else 0.0:.4f}")
+            if res:
+                aggregated.extend(res)
+                if sc and sc > best_seen_score:
+                    best_seen_score = sc
+
+        # Khử trùng lặp theo mã số hoặc câu hỏi chuẩn hoá, giữ bản có score cao nhất
+        seen_max = {}
+        def _norm_text(s: str) -> str:
+            return " ".join(unidecode((s or "").lower()).split())
+
+        def _key(item):
+            return item.get('ma_so') or _norm_text(item.get('cau_hoi', ''))
+
+        for it in aggregated:
+            k = _key(it)
+            if not k:
+                continue
+            cur = seen_max.get(k)
+            if cur is None or float(it.get('score', 0.0)) > float(cur.get('score', 0.0)):
+                seen_max[k] = it
+
+        uniq = list(seen_max.values())
+        uniq.sort(key=lambda x: x.get('score', 0.0), reverse=True)
+        top5 = uniq[:5]
+
+        # Log định dạng QA và bảng điểm
+        try:
+            formatted = format_kb_qa_list(top5, max_items=5)
+            if formatted:
+                logger.info("\n📚 [RetrieveFromKB] FORMATTED Top-5:\n" + formatted)
+        except Exception:
+            pass
+        if top5:
+            lines = ["\n🏷️ [RetrieveFromKB] TOP-5 SCORES (desc):"]
+            for i, it in enumerate(top5, 1):
+                lines.append(f"  {i}. score={float(it.get('score',0.0)):.4f} | Q: {str(it.get('cau_hoi',''))[:140]}")
+            logger.info("\n".join(lines))
+
+        top_score = float(top5[0].get('score', 0.0)) if top5 else 0.0
+        logger.info(f"📚 [RetrieveFromKB] EXEC - Aggregated top5={len(top5)}, top_score={top_score:.4f}")
+        return top5, top_score
 
     def post(self, shared, prep_res, exec_res):
         logger.info("📚 [RetrieveFromKB] POST - Lưu kết quả retrieve")
@@ -128,7 +170,6 @@ class ChitChatRespond(Node):
         # Lấy persona theo role (fallback an toàn)
         if role in PERSONA_BY_ROLE:
             persona = PERSONA_BY_ROLE[role]
-            ai_role = persona.get('persona', 'Trợ lý y khoa')
             audience = persona.get('audience', 'người dùng phổ thông')
             tone = persona.get('tone', 'thân thiện, rõ ràng')
         else:
