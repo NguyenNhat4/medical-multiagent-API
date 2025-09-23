@@ -173,7 +173,7 @@ class ChitChatRespond(Node):
             audience = persona.get('audience', 'người dùng phổ thông')
             tone = persona.get('tone', 'thân thiện, rõ ràng')
         else:
-            ai_role, audience, tone = 'Trợ lý y khoa', 'người dùng phổ thông', 'thân thiện, rõ ràng'
+             audience, tone =  'người dùng phổ thông', 'thân thiện, rõ ràng'
 
         # Gợi ý chuyên môn theo vai trò bác sĩ
         role_lower = (role or '').lower()
@@ -183,7 +183,6 @@ class ChitChatRespond(Node):
             conversation_history=formatted_history,
             query=query,
             role=role,
-            ai_role=ai_role,
             audience=audience,
             tone=tone
         )
