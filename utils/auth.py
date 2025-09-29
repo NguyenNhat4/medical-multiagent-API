@@ -50,7 +50,9 @@ def safe_hash_password(password: str) -> str:
     Note: bcrypt ignores bytes beyond 72; truncation ensures consistent behavior across backends.
     """
     password_bytes = password.encode("utf-8")[:72]
-    return bcrypt.hash(password_bytes)
+    # Convert back to string for passlib bcrypt
+    truncated_password = password_bytes.decode("utf-8", errors="ignore")
+    return bcrypt.hash(truncated_password)
 
 def safe_verify_password(password: str, hashed: str) -> bool:
     """
@@ -59,7 +61,9 @@ def safe_verify_password(password: str, hashed: str) -> bool:
     """
     try:
         password_bytes = password.encode("utf-8")[:72]
-        return bcrypt.verify(password_bytes, hashed)
+        # Convert back to string for passlib bcrypt
+        truncated_password = password_bytes.decode("utf-8", errors="ignore")
+        return bcrypt.verify(truncated_password, hashed)
     except Exception:
         return False
 
