@@ -158,7 +158,7 @@ def preload_oqa_index() -> None:
         logger.info(" Loading OQA vector index into memory...")
         try:
             _OQA_INDEX = OQAVectorIndex()
-            logger.info(f" OQA index loaded successfully: {_OQA_INDEX._embeddings.shape[0]} items, {_OQA_INDEX._dim}D embeddings")
+            logger.info(f" OQA index loaded successfully: {len(_OQA_INDEX._df)} items using BM25")
         except Exception as e:
             logger.error(f" Failed to load OQA index: {e}")
             raise
