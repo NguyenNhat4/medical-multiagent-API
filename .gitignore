@@ -74,7 +74,7 @@ coverage/
 *.sqlite
 *.sqlite3
 *.db
-
+.cursorrule
 # Optional npm cache directory
 .npm
 

@@ -44,6 +44,8 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from utils.auth import safe_hash_password, safe_verify_password
+
 # Create FastAPI app
 app = FastAPI(
     title="Medical Conversation API",
@@ -178,7 +180,7 @@ def login_with_google(payload: GoogleLoginReq, db: Session = Depends(get_db)):
         user = db.query(Users).filter(Users.email == email).first()
         if not user:
             random_password = uuid.uuid4().hex
-            hashed_password = bcrypt.hash(random_password)
+            hashed_password = safe_hash_password(random_password)
             user = Users(email=email, password=hashed_password)
             db.add(user)
             db.commit()
@@ -328,7 +330,7 @@ def create_user(payload: UserCreate, db: Session = Depends(get_db)):
     if db.query(Users).filter(Users.email == payload.email).first():
         raise HTTPException(status_code=409, detail="Email already exists")
 
-    hashed = bcrypt.hash(payload.password)
+    hashed = safe_hash_password(payload.password)
     user = Users(email=payload.email, password=hashed)
     db.add(user)
     db.commit()
@@ -341,7 +343,7 @@ from utils.auth import create_access_token, Token, get_current_user
 @router.post("/auth/login", response_model=TokenResponse)
 def login(body: LoginReq, db: Session = Depends(get_db)):
     user = db.query(Users).filter(Users.email == body.email).first()
-    if not user or not bcrypt.verify(body.password, user.password):
+    if not user or not safe_verify_password(body.password, user.password):
         raise HTTPException(status_code=401, detail="Invalid email or password")
     
     # Create access token
@@ -364,7 +366,7 @@ async def login_for_access_token(
     This endpoint is used by Swagger UI for authorization
     """
     user = db.query(Users).filter(Users.email == form_data.username).first()
-    if not user or not bcrypt.verify(form_data.password, user.password):
+    if not user or not safe_verify_password(form_data.password, user.password):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect email or password",

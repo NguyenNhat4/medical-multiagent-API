@@ -10,6 +10,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
+from passlib.hash import bcrypt  # For explicit bcrypt operations
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -42,6 +43,25 @@ def verify_password(plain_password, hashed_password):
 def get_password_hash(password):
     """Hash a password for storing"""
     return pwd_context.hash(password)
+
+def safe_hash_password(password: str) -> str:
+    """
+    Safely hash a password using bcrypt, truncating to 72 bytes to avoid backend errors.
+    Note: bcrypt ignores bytes beyond 72; truncation ensures consistent behavior across backends.
+    """
+    password_bytes = password.encode("utf-8")[:72]
+    return bcrypt.hash(password_bytes)
+
+def safe_verify_password(password: str, hashed: str) -> bool:
+    """
+    Safely verify a password against a bcrypt hash, truncating to 72 bytes first.
+    Returns False on any verification error.
+    """
+    try:
+        password_bytes = password.encode("utf-8")[:72]
+        return bcrypt.verify(password_bytes, hashed)
+    except Exception:
+        return False
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     """Create a JWT token"""
