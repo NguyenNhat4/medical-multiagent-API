@@ -153,10 +153,7 @@ def call_llm(prompt: str, fast_mode: bool = False) -> str:
     logger.info(f"📊 Estimated input tokens: {estimated_tokens} (prompt length: {len(prompt)} chars)")
     
     # Dynamic model selection based on fast_mode
-    if fast_mode:
-        model = "gemini-1.5-flash"  
-    else:
-        model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")  # High quality
+    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash-002")
     
     logger.info(f"🎯 Using model: {model}")
     
