@@ -552,6 +552,7 @@ async def chat(
         if role_name == RoleEnum.ORTHODONTIST.value:
             oqa_flow.run(shared)
         else:
+            logger.info(f"🔥 Running medical flow with shared: {shared}")
             med_flow.run(shared)
         
         explanation = shared.get("explain")

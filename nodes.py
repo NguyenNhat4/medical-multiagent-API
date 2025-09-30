@@ -23,9 +23,17 @@ import logging
 from unidecode import unidecode
 import time
 
+# Configure logging for this module with Vietnam timezone
+from utils.timezone_utils import setup_vietnam_logging
+from config import logging_config
 
-# Configure logging for this module
-logger = logging.getLogger(__name__)
+if logging_config.USE_VIETNAM_TIMEZONE:
+    logger = setup_vietnam_logging(__name__, 
+                                 level=getattr(logging, logging_config.LOG_LEVEL.upper()),
+                                 format_str=logging_config.LOG_FORMAT)
+else:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
 
 
 # ========== Medical Agent Nodes ==========

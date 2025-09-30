@@ -10,8 +10,17 @@ from OQA_nodes import (
 )
 import logging
 
-# Configure logging for this module
-logger = logging.getLogger(__name__)
+# Configure logging for this module with Vietnam timezone
+from utils.timezone_utils import setup_vietnam_logging
+from config import logging_config
+
+if logging_config.USE_VIETNAM_TIMEZONE:
+    logger = setup_vietnam_logging(__name__, 
+                                 level=getattr(logging, logging_config.LOG_LEVEL.upper()),
+                                 format_str=logging_config.LOG_FORMAT)
+else:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
 
 def create_med_agent_flow():
     logger.info("[Flow] Tạo medical agent flow với modular architecture")

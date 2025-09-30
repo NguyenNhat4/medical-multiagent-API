@@ -12,7 +12,17 @@ from typing import Any, Dict, Optional, List, Union, Tuple
 from functools import wraps
 import time
 
-logger = logging.getLogger(__name__)
+# Configure logging with Vietnam timezone
+from .timezone_utils import setup_vietnam_logging
+from config import logging_config
+
+if logging_config.USE_VIETNAM_TIMEZONE:
+    logger = setup_vietnam_logging(__name__, 
+                                 level=getattr(logging, logging_config.LOG_LEVEL.upper()),
+                                 format_str=logging_config.LOG_FORMAT)
+else:
+    logger = logging.getLogger(__name__)
+    logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
 
 # Safety constants
 MAX_RESPONSE_SIZE = 50000  # 50KB max response size
