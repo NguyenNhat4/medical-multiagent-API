@@ -2,6 +2,7 @@ from math import log
 from pocketflow import Node
 from utils.call_llm import call_llm
 from utils.APIKeyManager import APIOverloadException
+from config import timeout_config
 from utils.kb import retrieve, retrieve_random_by_role, get_kb, ROLE_TO_CSV
 
 from utils.response_parser import  parse_yaml_with_schema
@@ -190,7 +191,7 @@ class ChitChatRespond(Node):
         )
 
         try:
-            resp = call_llm(prompt)
+            resp = call_llm(prompt, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
         except APIOverloadException:
             # Đánh dấu API overload để route sang fallback
             resp = "Cảm ơn bạn đã chia sẻ. Mình luôn sẵn sàng hỗ trợ về thông tin y khoa nếu bạn cần nhé!"
@@ -242,7 +243,7 @@ class ComposeAnswer(Node):
         
         try:
             start_time = time.time()
-            result = call_llm(prompt)
+            result = call_llm(prompt, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
             end_time = time.time()
             
             # Log LLM timing
@@ -345,7 +346,7 @@ class MainDecisionAgent(Node):
         prompt = PROMPT_CLASSIFY_INPUT.format(query=query, role=role, conversation_history=formatted_history)
         
         try:
-            resp = call_llm(prompt, fast_mode=True)
+            resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
             
             
             logger.info(f"[MainDecision] EXEC - resp: {resp}")

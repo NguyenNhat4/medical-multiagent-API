@@ -2,6 +2,7 @@ from pocketflow import Node
 from utils.call_llm import call_llm, APIOverloadException
 
 from utils.response_parser import parse_yaml_with_schema
+from config import timeout_config
 from utils.prompts import (
     PROMPT_OQA_CLASSIFY_EN,
     PROMPT_OQA_COMPOSE_VI_WITH_SOURCES,
@@ -88,7 +89,7 @@ class OQAClassifyEN(Node):
         except Exception:
             pass
         try:
-            resp = call_llm(prompt, fast_mode=True)
+            resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
             logger.info(f"🧠 [OQAClassify] EXEC - Raw classification response length: {len(resp)} chars")
             logger.info(f"🧠 [OQAClassify] EXEC - Full API response:\n{resp}")
             
@@ -249,7 +250,7 @@ class OQAComposeAnswerVIWithSources(Node):
         except Exception:
             pass
         try:
-            resp = call_llm(prompt)
+            resp = call_llm(prompt, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
             logger.info(f"✍️ [OQACompose] EXEC - Raw LLM response length: {len(resp)} chars")
             logger.info(f"✍️ [OQACompose] EXEC - Full API response:\n{resp}")
             

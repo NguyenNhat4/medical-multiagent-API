@@ -21,6 +21,7 @@ import uvicorn
 import os
 import uuid
 from dotenv import load_dotenv
+import threading
 
 # Import chat routes
 from chat_routes import router as chat_router
@@ -35,6 +36,7 @@ from utils.response_parser import (
 from utils.helpers import serialize_conversation_history
 from utils.role_enum import RoleEnum, ROLE_DISPLAY_NAME, ROLE_DESCRIPTION
 from utils.kb_oqa import preload_oqa_index, is_oqa_index_loaded
+from contextlib import contextmanager
 
 # Load environment variables
 load_dotenv()
@@ -55,6 +57,76 @@ else:
     logger = logging.getLogger(__name__)
 
 from utils.auth import safe_hash_password, safe_verify_password
+from config import api_config, timeout_config
+import threading
+import sys
+
+
+class FlowTimeoutError(Exception):
+    """Raised when flow execution exceeds the configured timeout limit"""
+    pass
+
+
+def _create_timeout_checker(start_time: datetime, timeout_seconds: int, timeout_flag: list) -> callable:
+    """Create a closure that checks if timeout has occurred
+    
+    Args:
+        start_time: When the flow execution started
+        timeout_seconds: Maximum allowed execution time
+        timeout_flag: Mutable list to signal timeout (list[bool])
+        
+    Returns:
+        Callable that checks and logs timeout
+    """
+    def check_timeout():
+        elapsed = (datetime.now() - start_time).total_seconds()
+        if elapsed >= timeout_seconds:
+            timeout_flag[0] = True
+            logger.error(
+                f"⏱️ Flow execution timeout detected: {elapsed:.1f}s >= {timeout_seconds}s"
+            )
+    return check_timeout
+
+
+@contextmanager
+def flow_timeout(timeout_seconds: int = None):
+    """Context manager to enforce timeout on flow execution (cross-platform)
+    
+    This prevents requests from exceeding Cloudflare's gateway timeout by
+    enforcing a maximum execution time for the entire flow.
+    
+    Args:
+        timeout_seconds: Maximum time allowed for flow execution.
+                        Defaults to FLOW_EXECUTION_TIMEOUT from config.
+        
+    Raises:
+        FlowTimeoutError: If execution exceeds the timeout
+        
+    Note:
+        Uses threading-based timeout checking for Windows compatibility.
+        The timeout is checked after execution completes or at timeout boundary.
+    """
+    if timeout_seconds is None:
+        timeout_seconds = timeout_config.FLOW_EXECUTION_TIMEOUT
+    
+    start_time = datetime.now()
+    timeout_occurred = [False]  # Use list for mutability in closure
+    
+    # Create and start timeout checker
+    timeout_checker = _create_timeout_checker(start_time, timeout_seconds, timeout_occurred)
+    timer = threading.Timer(timeout_seconds, timeout_checker)
+    timer.daemon = True
+    timer.start()
+    
+    try:
+        yield
+        # Check if timeout occurred during execution
+        if timeout_occurred[0]:
+            raise FlowTimeoutError(
+                f"Flow execution exceeded {timeout_seconds} seconds timeout"
+            )
+    finally:
+        timer.cancel()
 
 # Create FastAPI app
 app = FastAPI(
@@ -548,12 +620,27 @@ async def chat(
             "conversation_history": conversation_history,
             "session_id": request.session_id,
         }
-        # run chat flow  -> updating shared store
-        if role_name == RoleEnum.ORTHODONTIST.value:
-            oqa_flow.run(shared)
-        else:
-            logger.info(f"🔥 Running medical flow with shared: {shared}")
-            med_flow.run(shared)
+        
+        # Run chat flow with timeout protection to prevent gateway timeouts
+        try:
+            with flow_timeout():
+                if role_name == RoleEnum.ORTHODONTIST.value:
+                    logger.info(
+                        f"🔥 Running OQA flow (timeout: {timeout_config.FLOW_EXECUTION_TIMEOUT}s)"
+                    )
+                    oqa_flow.run(shared)
+                else:
+                    logger.info(
+                        f"🔥 Running medical flow (timeout: {timeout_config.FLOW_EXECUTION_TIMEOUT}s)"
+                    )
+                    med_flow.run(shared)
+        except FlowTimeoutError as e:
+            logger.error(f"⏱️ Flow execution timeout: {e}")
+            # Provide graceful timeout response to user
+            shared["explain"] = timeout_config.get_timeout_message()
+            shared["suggestion_questions"] = []
+            shared["input_type"] = "timeout"
+            shared["need_clarify"] = False
         
         explanation = shared.get("explain")
         if not explanation or not isinstance(explanation, str) or not explanation.strip():

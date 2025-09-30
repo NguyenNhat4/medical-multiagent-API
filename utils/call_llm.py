@@ -6,9 +6,12 @@ import time
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
 load_dotenv()
 logger = logging.getLogger(__name__)
+
 from .APIKeyManager import api_manager, APIOverloadException
+from config import timeout_config
 
 
 def estimate_tokens(text: str) -> int:
@@ -21,12 +24,59 @@ def estimate_tokens(text: str) -> int:
 
 
 
-def call_llm(prompt: str, fast_mode: bool = False) -> str:
+def _has_exceeded_timeout(start_time: float, max_retry_time: int) -> bool:
+    """Check if current execution has exceeded the maximum retry time"""
+    elapsed = time.time() - start_time
+    return elapsed > max_retry_time
+
+
+def _would_exceed_timeout_after_sleep(start_time: float, sleep_duration: float, max_retry_time: int) -> bool:
+    """Check if sleeping would cause us to exceed the timeout"""
+    elapsed = time.time() - start_time
+    return (elapsed + sleep_duration) > max_retry_time
+
+
+def _calculate_jittered_sleep_time(base_sleep_seconds: float) -> float:
+    """Calculate sleep time with jitter to prevent thundering herd"""
+    jitter = random.uniform(
+        timeout_config.RETRY_JITTER_MIN_SECONDS,
+        timeout_config.RETRY_JITTER_MAX_SECONDS
+    )
+    return max(timeout_config.MIN_COOLDOWN_SECONDS, base_sleep_seconds) + jitter
+
+
+def _all_keys_cooling_down(status: dict, total_keys: int) -> bool:
+    """Check if all usable API keys are currently in cooldown"""
+    failed_count = len(status.get("failed", []))
+    cooldown_count = len(status.get("cooldowns", {}))
+    usable_keys = total_keys - failed_count
+    return cooldown_count == usable_keys and usable_keys > 0
+
+
+def call_llm(prompt: str, fast_mode: bool = False, max_retry_time: int = None) -> str:
+    """Call LLM with timeout protection and automatic retry logic
+    
+    Args:
+        prompt: The prompt to send to the LLM
+        fast_mode: Whether to use fast mode (disables thinking for supported models)
+        max_retry_time: Maximum time (seconds) to spend on retries before giving up.
+                       Defaults to LLM_RETRY_TIMEOUT from config.
+    
+    Returns:
+        str: The LLM's response text
+        
+    Raises:
+        APIOverloadException: When all API keys are exhausted or timeout is exceeded
+    """
+    if max_retry_time is None:
+        max_retry_time = timeout_config.LLM_RETRY_TIMEOUT
+    
     model_id = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     logger.info(f"🎯 model: {model_id}")
 
-    max_attempts = max(1, len(api_manager.api_keys))  # thử tối đa = số key
+    max_attempts = max(1, len(api_manager.api_keys))
     last_err = None
+    start_time = time.time()
 
     for attempt in range(max_attempts):
         # 1) Chọn 1 key khả dụng cho lần thử này
@@ -87,16 +137,38 @@ def call_llm(prompt: str, fast_mode: bool = False) -> str:
                 # Lỗi khác → cooldown ngắn để tránh spam
                 api_manager.mark_transient_error(idx)
 
-            # 3) Nếu tất cả key đang cooldown: ngủ đến khi key gần nhất hết cooldown (thêm jitter)
+            # 3) Handle cooldown when all keys are temporarily unavailable
             st = api_manager.status()
-            if len(st.get("cooldowns", {})) == len(api_manager.api_keys) - len(st.get("failed", [])):
-                # tất cả usable key đều đang cooldown
-                wait_secs = min(st["cooldowns"].values()) if st["cooldowns"] else 1
-                sleep_for = max(1, wait_secs) + random.uniform(0, 0.5)
-                logger.warning(f"⏳ All keys cooling down. Sleeping {sleep_for:.1f}s…")
-                time.sleep(sleep_for)
+            if _all_keys_cooling_down(st, len(api_manager.api_keys)):
+                # Calculate how long to wait with jitter
+                min_cooldown = min(st["cooldowns"].values()) if st["cooldowns"] else timeout_config.MIN_COOLDOWN_SECONDS
+                sleep_duration = _calculate_jittered_sleep_time(min_cooldown)
+                
+                # Check if sleeping would exceed our timeout budget
+                if _would_exceed_timeout_after_sleep(start_time, sleep_duration, max_retry_time):
+                    elapsed = time.time() - start_time
+                    logger.error(
+                        f"⏱️ Cannot wait {sleep_duration:.1f}s (would exceed max retry time of {max_retry_time}s). "
+                        f"Elapsed: {elapsed:.1f}s"
+                    )
+                    raise APIOverloadException("All API keys cooling down and max retry time reached")
+                
+                elapsed = time.time() - start_time
+                logger.warning(
+                    f"⏳ All keys cooling down. Sleeping {sleep_duration:.1f}s... "
+                    f"(elapsed: {elapsed:.1f}s / {max_retry_time}s)"
+                )
+                time.sleep(sleep_duration)
 
-            # Tiếp tục vòng for: sẽ pick key khác (hoặc key vừa hết cooldown)
+            # Check if we've exceeded max retry time after attempting retry
+            if _has_exceeded_timeout(start_time, max_retry_time):
+                elapsed = time.time() - start_time
+                logger.error(
+                    f"⏱️ Max retry time exceeded: {elapsed:.1f}s > {max_retry_time}s"
+                )
+                raise APIOverloadException(f"Max retry time exceeded: {elapsed:.1f}s")
+            
+            # Continue to next attempt with a different key or after cooldown
 
     # Hết attempts - kiểm tra xem có phải do tất cả keys đều overload không
     st = api_manager.status()
