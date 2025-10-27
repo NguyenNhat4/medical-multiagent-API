@@ -150,4 +150,4 @@ if __name__ == "__main__":
     logger.info(f"🚀 Starting Medical Conversation API on {host}:{port}")
     logger.info(f"📖 API Documentation: http://{host}:{port}/api/docs")
 
-    uvicorn.run("api_new:app", host=host, port=port, reload=debug, log_level="info")
+    uvicorn.run("app:app", host=host, port=port, reload=debug, log_level="info")

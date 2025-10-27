@@ -41,7 +41,7 @@ def main():
         
         # Import and run the API
         import uvicorn
-        from api import app
+        from app import app
         
         # Configuration
         host = os.getenv("API_HOST", "127.0.0.1")
@@ -60,7 +60,7 @@ def main():
         
         # Start the server with auto-reload
         uvicorn.run(
-            "api:app",
+            "app:app",
             host=host,
             port=port,
             reload=reload_enabled,
