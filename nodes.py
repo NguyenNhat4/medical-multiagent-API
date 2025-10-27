@@ -378,7 +378,7 @@ class FallbackNode(Node):
         logger.info(f"🔄 [FallbackNode] EXEC - Fallback search cho role: {role} với query: '{query[:50]}...', rag_questions: {len(rag_questions) if rag_questions else 0}")
         
         try:
-            # 1) Tìm tuần tự trong CSV theo role, so khớp HOÀN TOÀN với cột CÂU HỎI
+            # 1) Tìm tuần tự trong CSV theo role, so khớp HOÀN TOÀN với cột CAUHOI
             kb = get_kb()
             role_lower = (role or "").lower()
             role_csv = ROLE_TO_CSV.get(role_lower)
@@ -393,18 +393,18 @@ class FallbackNode(Node):
             if role_csv and role_csv in kb.role_dataframes:
                 df = kb.role_dataframes[role_csv]
                 for _, row in df.iterrows():
-                    q_text = str(row.get("CÂU HỎI", ""))
-                    a_text = str(row.get("CÂU  TRẢ    LỜI", ""))
+                    q_text = str(row.get("CAUHOI", ""))
+                    a_text = str(row.get("CAUTRALOI", ""))
                     qn = _norm_text(q_text)
                     if qn and q_norm and qn == q_norm:
                         exact_matches.append({
                             "cau_hoi": q_text,
                             "cau_tra_loi": a_text,
-                            "de_muc": row.get("ĐỀ MỤC", ""),
-                            "chu_de_con": row.get("CHỦ  ĐỀ  CON", ""),
-                            "ma_so": row.get("MÃ SỐ", ""),
+                            "de_muc": row.get("DEMUC", ""),
+                            "chu_de_con": row.get("CHUDECON", ""),
+                            "ma_so": row.get("MASO", ""),
                             "keywords": row.get("keywords", ""),
-                            "giai_thich": row.get("GIẢI THÍCH", ""),
+                            "giai_thich": row.get("GIAITHICH", ""),
                         })
 
             # Build retrieval queries: user input first, then rag_questions (if any)

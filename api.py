@@ -179,7 +179,7 @@ async def startup_event():
         logger.info(f"✅ Knowledge base loaded successfully!")
         logger.info(f"📊 Total records: {len(kb.df)}")
         logger.info(f"📁 Role-specific dataframes: {list(kb.role_dataframes.keys())}")
-        logger.info(f"🔧 Vectorizers created: {list(kb.role_vectorizers.keys())}")
+        logger.info(f"🔧 BM25 indices created: {list(kb.role_bm25s.keys())}")
         
         # Test a quick retrieval to ensure everything works
         from utils.kb import retrieve

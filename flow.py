@@ -52,13 +52,16 @@ def create_med_agent_flow():
     # From ScoreDecision, route to appropriate action
     score_decision - "compose_answer" >> compose_answer
     score_decision - "clarify" >> clarify_question
-    
-    # From ComposeAnswer, route to fallback if API overloaded
+
+    # ComposeAnswer is terminal by default, but can route to fallback if API overloaded
     compose_answer - "fallback" >> fallback
-    # From ChitChat, route to fallback if API overloaded
+    # compose_answer with "default" action is terminal (no routing needed)
+
+    # ChitChat can route to fallback if API overloaded
     chitchat - "fallback" >> fallback
-    
-    # ChitChatRespond is terminal for non-RAG cases
+    # chitchat with "default" action is terminal
+
+    # ClarifyQuestion is terminal (no routing needed)
     
    
     flow = Flow(start=ingest)

@@ -10,13 +10,13 @@ from unidecode import unidecode
 from .role_enum import RoleEnum
 
 KB_COLUMNS = [
-    "ĐỀ MỤC",
-    "CHỦ  ĐỀ  CON",
-    "MÃ SỐ",
-    "CÂU HỎI",
-    "CÂU  TRẢ    LỜI",
+    "DEMUC",
+    "CHUDECON",
+    "MASO",
+    "CAUHOI",
+    "CAUTRALOI",
     "keywords",
-    "GIẢI THÍCH",  # Optional column - not all CSV files have this
+    "GIAITHICH",  # Optional column - not all CSV files have this
 ]
 
 ROLE_TO_CSV = {
@@ -93,9 +93,9 @@ class KnowledgeBaseIndex:
                 colmap[c] = key
             df = df.rename(columns=colmap)
 
-            # Handle STT → MÃ SỐ mapping for bsrhm.csv compatibility
-            if "STT" in df.columns and "MÃ SỐ" not in df.columns:
-                df["MÃ SỐ"] = df["STT"]
+            # Handle STT → MASO mapping for bsrhm.csv compatibility
+            if "STT" in df.columns and "MASO" not in df.columns:
+                df["MASO"] = df["STT"]
 
             # Ensure required columns exist under BOTH original (possibly multi-space)
             # and single-space-collapsed variants for downstream compatibility.
@@ -139,17 +139,17 @@ class KnowledgeBaseIndex:
                 # Create combined field for this role's data
                 role_df = df.copy()
                 role_df["combined"] = (
-                    role_df["ĐỀ MỤC"]
+                    role_df["DEMUC"]
                     + " \n "
-                    + role_df["CHỦ  ĐỀ  CON"]
+                    + role_df["CHUDECON"]
                     + " \n "
-                    + role_df["CÂU HỎI"]
+                    + role_df["CAUHOI"]
                     + " \n "
-                    + role_df["CÂU  TRẢ    LỜI"]
+                    + role_df["CAUTRALOI"]
                     + " \n "
                     + role_df["keywords"]
                     + " \n "
-                    + role_df["GIẢI THÍCH"]  # Include explanation if available
+                    + role_df["GIAITHICH"]  # Include explanation if available
                 )
                 role_df["combined_norm"] = role_df["combined"].apply(_normalize_accents)
 
@@ -169,17 +169,17 @@ class KnowledgeBaseIndex:
 
         # Combined field for retrieval
         merged["combined"] = (
-            merged["ĐỀ MỤC"]
+            merged["DEMUC"]
             + " \n "
-            + merged["CHỦ  ĐỀ  CON"]
+            + merged["CHUDECON"]
             + " \n "
-            + merged["CÂU HỎI"]
+            + merged["CAUHOI"]
             + " \n "
-            + merged["CÂU  TRẢ    LỜI"]
+            + merged["CAUTRALOI"]
             + " \n "
             + merged["keywords"]
             + " \n "
-            + merged["GIẢI THÍCH"]  # Include explanation if available
+            + merged["GIAITHICH"]  # Include explanation if available
         )
 
         merged["combined_norm"] = merged["combined"].apply(_normalize_accents)
@@ -234,13 +234,13 @@ class KnowledgeBaseIndex:
             results.append(
                 {
                     "score": float(scores[int(i)]),
-                    "de_muc": row.get("ĐỀ MỤC", ""),
-                    "chu_de_con": row.get("CHỦ  ĐỀ  CON", ""),
-                    "ma_so": row.get("MÃ SỐ", ""),
-                    "cau_hoi": row.get("CÂU HỎI", ""),
-                    "cau_tra_loi": row.get("CÂU  TRẢ    LỜI", ""),
+                    "de_muc": row.get("DEMUC", ""),
+                    "chu_de_con": row.get("CHUDECON", ""),
+                    "ma_so": row.get("MASO", ""),
+                    "cau_hoi": row.get("CAUHOI", ""),
+                    "cau_tra_loi": row.get("CAUTRALOI", ""),
                     "keywords": row.get("keywords", ""),
-                    "giai_thich": row.get("GIẢI THÍCH", ""),  # Add explanation field
+                    "giai_thich": row.get("GIAITHICH", ""),  # Add explanation field
                 }
             )
         return results
@@ -279,15 +279,15 @@ class KnowledgeBaseIndex:
         for _, row in sampled_df.iterrows():
             results.append({
                 "score": 1.0,  # Random selection, so full score
-                "de_muc": row.get("ĐỀ MỤC", ""),
-                "chu_de_con": row.get("CHỦ  ĐỀ  CON", ""),
-                "ma_so": row.get("MÃ SỐ", ""),
-                "cau_hoi": row.get("CÂU HỎI", ""),
-                "cau_tra_loi": row.get("CÂU  TRẢ    LỜI", ""),
+                "de_muc": row.get("DEMUC", ""),
+                "chu_de_con": row.get("CHUDECON", ""),
+                "ma_so": row.get("MASO", ""),
+                "cau_hoi": row.get("CAUHOI", ""),
+                "cau_tra_loi": row.get("CAUTRALOI", ""),
                 "keywords": row.get("keywords", ""),
-                "giai_thich": row.get("GIẢI THÍCH", ""),  # Add explanation field
+                "giai_thich": row.get("GIAITHICH", ""),  # Add explanation field
             })
-        
+
         return results
 
 
