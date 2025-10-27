@@ -10,8 +10,8 @@ from google.genai import types
 load_dotenv()
 logger = logging.getLogger(__name__)
 
-from .APIKeyManager import api_manager, APIOverloadException
-from config import timeout_config
+from utils.auth.APIKeyManager import api_manager, APIOverloadException
+from config.timeout_config import timeout_config
 
 
 def estimate_tokens(text: str) -> int:

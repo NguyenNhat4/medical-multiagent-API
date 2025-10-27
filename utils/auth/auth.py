@@ -4,7 +4,7 @@ Authentication utilities for JWT token handling
 import os
 import time
 from datetime import datetime, timedelta
-from .timezone_utils import get_vietnam_time
+from utils.timezone_utils import get_vietnam_time
 from typing import Dict, Optional
 
 from fastapi import Depends, HTTPException, status

@@ -1,9 +1,9 @@
 from pocketflow import Node
-from utils.call_llm import call_llm, APIOverloadException
-
-from utils.response_parser import parse_yaml_with_schema
-from config import timeout_config
-from utils.prompts import (
+from utils.llm import call_llm
+from utils.auth import APIOverloadException
+from utils.parsing import parse_yaml_with_schema
+from config.timeout_config import timeout_config
+from utils.llm import (
     PROMPT_OQA_CLASSIFY_EN,
     PROMPT_OQA_COMPOSE_VI_WITH_SOURCES,
     PROMPT_OQA_CHITCHAT,
@@ -16,8 +16,7 @@ from utils.helpers import (
 from utils.role_enum import (
     PERSONA_BY_ROLE
 )
-
-from utils.kb_oqa import (
+from utils.knowledge_base.kb_oqa import (
     retrieve_oqa,
     retrieve_random_oqa,
     get_references_by_ids,
@@ -27,7 +26,7 @@ import logging
 
 # Configure logging for this module with Vietnam timezone
 from utils.timezone_utils import setup_vietnam_logging
-from config import logging_config
+from config.logging_config import logging_config
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 

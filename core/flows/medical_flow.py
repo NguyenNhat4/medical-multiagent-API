@@ -1,18 +1,17 @@
 from pocketflow import Flow
-from nodes import (
-    IngestQuery, MainDecisionAgent, ScoreDecisionNode, RetrieveFromKB, 
+from core.nodes.medical_nodes import (
+    IngestQuery, MainDecisionAgent, ScoreDecisionNode, RetrieveFromKB,
     ComposeAnswer, ClarifyQuestionNode, GreetingResponse, FallbackNode, ChitChatRespond,
-    # OQA
 )
-from OQA_nodes import (
-    OQAIngestDefaults, OQAClassifyEN, OQARetrieve, 
+from core.nodes.oqa_nodes import (
+    OQAIngestDefaults, OQAClassifyEN, OQARetrieve,
     OQAComposeAnswerVIWithSources, OQAClarify, OQAChitChat
 )
 import logging
 
 # Configure logging for this module with Vietnam timezone
 from utils.timezone_utils import setup_vietnam_logging
-from config import logging_config
+from config.logging_config import logging_config
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 

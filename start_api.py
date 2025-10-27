@@ -12,7 +12,7 @@ load_dotenv()
 
 # Configure logging with Vietnam timezone
 from utils.timezone_utils import setup_vietnam_logging
-from config import logging_config
+from config.logging_config import logging_config
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 
@@ -41,7 +41,7 @@ def main():
         
         # Import and run the API
         import uvicorn
-        from api import app
+        from app import app
         
         # Configuration
         host = os.getenv("API_HOST", "127.0.0.1")
@@ -60,11 +60,11 @@ def main():
         
         # Start the server with auto-reload
         uvicorn.run(
-            "api:app",
+            "app:app",
             host=host,
             port=port,
             reload=reload_enabled,
-            reload_dirs=[".", "utils", "database", "services"],  # Watch these directories
+            reload_dirs=[".", "utils", "database", "services", "api", "core", "config"],  # Watch these directories
             reload_excludes=["*.log", "*.db", "__pycache__", ".git"],  # Ignore these
             log_level="info"
         )

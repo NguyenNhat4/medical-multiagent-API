@@ -7,14 +7,14 @@ import logging
 import re
 import yaml
 from unidecode import unidecode
-from .call_llm import call_llm
-from .kb import retrieve, retrieve_random_by_role
-from .response_parser import parse_yaml_response, validate_yaml_structure
-from .role_enum import RoleEnum
+from utils.llm import call_llm
+from utils.knowledge_base import retrieve, retrieve_random_by_role
+from utils.parsing.response_parser import parse_yaml_response, validate_yaml_structure
+from utils.role_enum import RoleEnum
 
 # Configure logging with Vietnam timezone
-from .timezone_utils import setup_vietnam_logging
-from config import logging_config
+from utils.timezone_utils import setup_vietnam_logging
+from config.logging_config import logging_config
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 

@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from rank_bm25 import BM25Okapi
 from unidecode import unidecode
-from .role_enum import RoleEnum
+from ..role_enum import RoleEnum
 
 KB_COLUMNS = [
     "DEMUC",

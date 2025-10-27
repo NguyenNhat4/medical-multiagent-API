@@ -13,8 +13,8 @@ from functools import wraps
 import time
 
 # Configure logging with Vietnam timezone
-from .timezone_utils import setup_vietnam_logging
-from config import logging_config
+from utils.timezone_utils import setup_vietnam_logging
+from config.logging_config import logging_config
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 
