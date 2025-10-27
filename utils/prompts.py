@@ -14,8 +14,8 @@ Nếu type = medical_question, sinh tối đa 7 câu hỏi để RAG tốt hơn 
 Ngữ cảnh hội thoại gần đây:
 {conversation_history}
 
-Input: "{query}"
-Role: {role}
+Input của user: "{query}"
+Role của user: {role}
 QUAN TRỌNG: 
 - Đảm bảo YAML trả về có thể parse được
 - Tất cả strings đều phải được quote bằng dấu ngoặc đôi
