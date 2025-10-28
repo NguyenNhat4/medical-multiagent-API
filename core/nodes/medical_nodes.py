@@ -77,24 +77,24 @@ class RetrieveFromKB(Node):
             retrieval_queries.extend([q for q in rag_questions if q])
 
         # Use aggregate_retrievals helper function
-        top5, top_score = aggregate_retrievals(retrieval_queries, role=user_role, top_k=5)
+        retrieved_results, top_score = aggregate_retrievals(retrieval_queries, role=user_role, top_k=15)
 
         # Log formatted QA list and score table
         try:
-            formatted = format_kb_qa_list(top5, max_items=5)
+            formatted = format_kb_qa_list(retrieved_results, max_items=15)
             if formatted:
-                logger.info("\n📚 [RetrieveFromKB] FORMATTED Top-5:\n" + formatted)
+                logger.info("\n📚 [RetrieveFromKB] FORMATTED Top Results:\n" + formatted)
         except Exception:
             pass
 
-        if top5:
-            lines = ["\n🏷️ [RetrieveFromKB] TOP-5 SCORES (desc):"]
-            for i, it in enumerate(top5, 1):
+        if retrieved_results:
+            lines = ["\n🏷️ [RetrieveFromKB] TOP SCORES (desc):"]
+            for i, it in enumerate(retrieved_results, 1):
                 lines.append(f"  {i}. score={float(it.get('score',0.0)):.4f} | Q: {str(it.get('cau_hoi',''))[:140]}")
             logger.info("\n".join(lines))
 
-        logger.info(f"📚 [RetrieveFromKB] EXEC - Aggregated top5={len(top5)}, top_score={top_score:.4f}")
-        return top5, top_score
+        logger.info(f"📚 [RetrieveFromKB] EXEC - Aggregated results={len(retrieved_results)}, top_score={top_score:.4f}")
+        return retrieved_results, top_score
 
     def post(self, shared, prep_res, exec_res):
         logger.info("📚 [RetrieveFromKB] POST - Lưu kết quả retrieve")
@@ -409,19 +409,19 @@ class FallbackNode(Node):
                 retrieval_queries.extend([q for q in rag_questions if q])
 
             # Use aggregate_retrievals helper function
-            top5, _ = aggregate_retrievals(retrieval_queries, role=role, top_k=5)
+            retrieved_results, _ = aggregate_retrievals(retrieval_queries, role=role, top_k=15)
 
             try:
-                formatted = format_kb_qa_list(top5, max_items=5)
+                formatted = format_kb_qa_list(retrieved_results, max_items=15)
                 if formatted:
-                    logger.info("\n📚 [FallbackNode] RETRIEVE - Aggregated Results (Top 5):\n" + formatted)
+                    logger.info("\n📚 [FallbackNode] RETRIEVE - Aggregated Results:\n" + formatted)
             except Exception:
                 pass
 
-            # Log thêm bảng điểm cho top5
-            if top5:
-                lines = ["\n🏷️ [FallbackNode] TOP-5 SCORES (desc):"]
-                for i, it in enumerate(top5, 1):
+            # Log thêm bảng điểm cho retrieved_results
+            if retrieved_results:
+                lines = ["\n🏷️ [FallbackNode] TOP SCORES (desc):"]
+                for i, it in enumerate(retrieved_results, 1):
                     q = str(it.get('cau_hoi', ''))
                     sc = float(it.get('score', 0.0))
                     lines.append(f"  {i}. score={sc:.4f} | Q: {q[:140]}")
@@ -433,7 +433,7 @@ class FallbackNode(Node):
                 # Suggestions: top4 từ retrieve (khác câu exact match)
                 suggestion_questions = []
                 exact_q_norm = _norm_text(best.get("cau_hoi", ""))
-                for it in top5:
+                for it in retrieved_results:
                     q = it.get('cau_hoi', '')
                     if q and _norm_text(q) != exact_q_norm:
                         suggestion_questions.append(q)
@@ -444,23 +444,23 @@ class FallbackNode(Node):
                 logger.info("\n✅ [FallbackNode] EXPLAIN (exact match): score=1.0000 | Q (exact): " + str(best.get("cau_hoi", ""))[:140])
                 if suggestion_questions:
                     # map score theo câu hỏi để log
-                    score_map = {str(it.get('cau_hoi', '')): float(it.get('score', 0.0)) for it in top5}
+                    score_map = {str(it.get('cau_hoi', '')): float(it.get('score', 0.0)) for it in retrieved_results}
                     sug_lines = ["📌 [FallbackNode] SUGGESTIONS (top4):"]
                     for idx, sq in enumerate(suggestion_questions, 1):
                         sug_lines.append(f"  {idx}. score={score_map.get(sq, 0.0):.4f} | Q: {sq[:140]}")
                     logger.info("\n".join(sug_lines))
             else:
-                # Không có exact match: nếu có top5, dùng top1 làm explain và còn lại làm suggestion
-                if top5:
-                    best_answer = top5[0]
+                # Không có exact match: nếu có retrieved_results, dùng top1 làm explain và còn lại làm suggestion
+                if retrieved_results:
+                    best_answer = retrieved_results[0]
                     explain = best_answer.get("cau_tra_loi", "")
-                    suggestion_questions = [it.get('cau_hoi', '') for it in top5[1:5] if it.get('cau_hoi')]
+                    suggestion_questions = [it.get('cau_hoi', '') for it in retrieved_results[1:5] if it.get('cau_hoi')]
                     score = float(best_answer.get('score', 0.0))
                     # Log lựa chọn cuối
                     logger.info(f"\n✅ [FallbackNode] EXPLAIN (retrieve top1): score={score:.4f} | Q: {str(best_answer.get('cau_hoi',''))[:140]}")
                     if suggestion_questions:
                         sug_lines = ["📌 [FallbackNode] SUGGESTIONS (next4):"]
-                        for idx, it in enumerate(top5[1:5], 1):
+                        for idx, it in enumerate(retrieved_results[1:5], 1):
                             if not it.get('cau_hoi'):
                                 continue
                             sug_lines.append(f"  {idx}. score={float(it.get('score', 0.0)):.4f} | Q: {str(it.get('cau_hoi'))[:140]}")

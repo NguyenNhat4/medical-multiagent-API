@@ -6,10 +6,29 @@ PROMPT_CLASSIFY_INPUT = """
 Phân loại DUY NHẤT input thành một trong: medical_question | chitchat.
 
 Định nghĩa nhanh:
-- medical_question: hỏi kiến thức y khoa cụ thể, cần tra cứu cơ sở tri thứ chuẩn bị bởi bác sĩ để trả lời chính xác (RAG).
+- medical_question: hỏi kiến thức y khoa cụ thể, cần tra cứu cơ sở tri thức chuẩn bị bởi bác sĩ để trả lời chính xác (RAG).
 - chitchat: chào hỏi/trò chuyện thân thiện/xã giao trong PHẠM VI Y KHOA (KHÔNG RAG).
 
-Nếu type = medical_question, sinh tối đa 7 câu hỏi để RAG tốt hơn (liên quan y khoa và user input và ngữ cảnh hội thoại và role của họ, 2 câu trong số đó có thể hướng tiếp theo).
+Nếu type = medical_question, sinh tối đa 5 câu hỏi NGẮN GỌN để RAG:
+- MỖI câu hỏi chỉ 3-7 từ, tập trung vào KEYWORDS quan trọng
+- Ưu tiên cụm từ y khoa (VD: "biến chứng đái tháo đường", "kiểm soát đường huyết")
+- TRÁNH câu hỏi dài dòng kiểu "Làm thế nào để..." hoặc "...như thế nào?"
+- Mỗi câu nên khác góc độ (biến chứng, triệu chứng, phòng ngừa, điều trị, nguyên nhân)
+
+VÍ DỤ TỐT (ngắn gọn, keywords):
+User: "Vì sao bệnh đái tháo đường lại nguy hiểm?"
+rag_questions:
+  - "biến chứng nguy hiểm đái tháo đường"
+  - "tỷ lệ tử vong tiểu đường"
+  - "đái tháo đường gây suy thận"
+  - "đột quỵ do đường huyết cao"
+  - "hôn mê tiểu đường"
+
+VÍ DỤ XẤU (quá dài, không focus):
+rag_questions:
+  - "Biến chứng tim mạch của bệnh đái tháo đường là gì và cách phòng ngừa?"  # QUÁ DÀI
+  - "Làm thế nào để kiểm soát đường huyết hiệu quả nhằm ngăn ngừa biến chứng thận?"  # QUÁ DÀI
+  - "Ảnh hưởng của bệnh đái tháo đường đến thị lực như thế nào?"  # QUÁ DÀI
 
 Ngữ cảnh hội thoại gần đây:
 {conversation_history}
@@ -19,18 +38,18 @@ Role của user: {role}
 QUAN TRỌNG: 
 - Đảm bảo YAML trả về có thể parse được
 - Tất cả strings đều phải được quote bằng dấu ngoặc đôi
-- Tránh dấu hai chấm (:) trong nội dung
+- Tránh dấu hai chấm (:) trong block yaml
 
 Trả về CHỈ một code block YAML hợp lệ:
 
 ```yaml
 type: medical_question  # hoặc chitchat
 confidence: high  # hoặc medium, low  
-reason: "Lý do ngắn gọn không chứa dấu hai chấm"
+reason: "Lý do ngắn gọn "
 rag_questions:
-  - "Câu hỏi 1 không chứa dấu hai chấm"
-  - "Câu hỏi 2 không chứa dấu hai chấm"
-  - "Câu hỏi 3 không chứa dấu hai chấm"
+  - "Câu hỏi 1"
+  - "Câu hỏi 2 "
+  - "Câu hỏi 3 "
 ```
 """
 
@@ -73,7 +92,7 @@ HỢP ĐỒNG ĐẦU RA (BẮT BUỘC)
 MẪU PHẢI THEO ĐÚNG (giữ nguyên cấu trúc và THỤT LỀ, chỉ thay nội dung <>):
 ```yaml
 explanation: |
-  <diễn giải giải thích, trả lời súc tích, dựa trên Q&A; có thể dùng **nhấn mạnh** cho các từ khoá quan trọng>
+  <đưa ra câu trả lời dựa trên Q&A;  dùng **nhấn mạnh** cho các từ khoá quan trọng>
   👉 Tóm lại, <tóm lược ngắn gọn có thể dựa vào danh sách Q&A>
 suggestion_questions:
   - "Câu hỏi gợi ý 1"
@@ -114,7 +133,25 @@ Definitions:
 - medical_question: concrete medical/dental knowledge question that requires consulting a curated knowledge base.
 - chitchat: greetings/small talk within healthcare scope.
 
-If type = medical_question, generate up to 7 English RAG sub-questions that could improve retrieval, one of that will be user input but english version.
+If type = medical_question, generate up to 7 SHORT English RAG queries:
+- Each query: 3-7 words, focus on KEYWORDS
+- Prioritize medical terms (e.g., "orthodontic complications", "malocclusion treatment")
+- AVOID long questions like "How to..." or "What are the..."
+- Cover different angles (symptoms, treatment, prevention, diagnosis, causes)
+- Include English translation of user input as one query
+
+GOOD EXAMPLES (short, keyword-focused):
+User: "Tại sao niềng răng lại đau?"
+rag_questions:
+  - "orthodontic pain causes"
+  - "braces discomfort management"
+  - "tooth movement pain"
+  - "why does orthodontic treatment hurt"
+  - "pain relief during orthodontics"
+
+BAD EXAMPLES (too long, not focused):
+  - "What are the main causes of pain during orthodontic treatment and how to manage it?"  # TOO LONG
+  - "How can patients reduce discomfort when wearing braces?"  # TOO LONG
 
 Recent conversation (compact):
 {conversation_history}
