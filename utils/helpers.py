@@ -81,7 +81,7 @@ def aggregate_retrievals(
     Aggregate retrieval results from multiple queries with deduplication.
 
     This function:
-    1. Retrieves results for each query
+    1. Retrieves top 3 results for each query
     2. Aggregates all results
     3. Deduplicates by ma_so or normalized question (keeps highest score)
     4. Sorts by score descending
@@ -114,7 +114,7 @@ def aggregate_retrievals(
         if not query or not query.strip():
             continue
         try:
-            results, score = retrieve(query, role, top_k=5)
+            results, score = retrieve(query, role, top_k=3)
             logger.info(
                 f"📚 [aggregate_retrievals] Retrieved for '{query[:60]}...': "
                 f"{len(results) if results else 0} results, best score: {score:.4f}"
