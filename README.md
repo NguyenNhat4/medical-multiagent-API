@@ -156,37 +156,6 @@ flowchart TD
 ```
 
 ### Cấu trúc thư mục
-
-```
-chatbot-rhm-api/
-├── 📁 database/           # Database models & connection
-│   ├── db.py             # Database setup
-│   ├── models.py         # SQLAlchemy models  
-│   └── init.sql          # Database schema
-├── 📁 utils/             # Utility functions
-│   ├── call_llm.py       # Gemini AI integration
-│   ├── kb.py             # Knowledge base search
-│   ├── prompts.py        # LLM prompts
-│   ├── role_enum.py      # User roles definition
-│   └── response_parser.py # YAML response parsing
-├── 📁 services/          # Business logic
-│   └── chat_service.py   # Chat operations
-├── 📁 schemas/           # Pydantic schemas  
-│   └── chat_schemas.py   # API request/response models
-├── 📁 routes/            # API routes (deprecated)
-├── 📁 medical_knowledge_base/ # CSV knowledge files
-│   ├── bndtd.csv         # Bệnh nhân đái tháo đường
-│   ├── bnrhm.csv         # Bệnh nhân răng hàm mặt
-│   ├── bsnt.csv          # Bác sĩ nội tiết
-│   └── bsrhm.csv         # Bác sĩ răng hàm mặt
-├── api.py                # Main API server
-├── flow.py               # PocketFlow definition
-├── nodes.py              # Flow nodes implementation
-├── chat_routes.py        # Chat thread management routes
-├── config.py             # Configuration settings
-└── main.py               # Entry point
-```
-
 ### 2. Cấu hình environment variables
 
 Tạo file `.env`:
