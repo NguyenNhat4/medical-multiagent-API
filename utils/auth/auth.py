@@ -9,7 +9,12 @@ from typing import Dict, Optional
 
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError, jwt
+try:
+    from jose import JWTError, jwt
+except ImportError as e:
+    print(f" Error importing jose: {e}")
+    print(" Please install python-jose: pip install python-jose[cryptography]")
+    raise ImportError("Missing required dependency: python-jose[cryptography]") from e
 from passlib.context import CryptContext
 from passlib.hash import bcrypt  # For explicit bcrypt operations
 from pydantic import BaseModel
