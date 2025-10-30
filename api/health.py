@@ -65,13 +65,16 @@ async def get_available_roles():
     the appropriate role for their medical consultation context.
     """
     try:
+        # Filter out orthodontist role from frontend response
+        filtered_roles = [r for r in RoleEnum if r != RoleEnum.ORTHODONTIST]
+        
         roles = [
             RoleInfo(
                 id=r.value,
                 name=ROLE_DISPLAY_NAME[r],
                 description=ROLE_DESCRIPTION[r],
             )
-            for r in RoleEnum
+            for r in filtered_roles
         ]
 
         return RolesResponse(
