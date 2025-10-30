@@ -7,7 +7,6 @@ class RoleEnum(str, Enum):
     PATIENT_DIABETES = "patient_diabetes"
     DOCTOR_DENTAL = "doctor_dental"
     DOCTOR_ENDOCRINE = "doctor_endocrine"
-    ORTHODONTIST = "orthodontist"
 
 
 ROLE_DISPLAY_NAME: Dict[RoleEnum, str] = {
