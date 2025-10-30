@@ -28,9 +28,33 @@ logger = logging.getLogger(__name__)
 # Create router
 router = APIRouter(prefix="/api", tags=["chat"])
 
-# Initialize flows
-med_flow = create_med_agent_flow()
-oqa_flow = create_oqa_orthodontist_flow()
+# Lazy flow initialization to prevent startup errors
+_med_flow = None
+_oqa_flow = None
+
+def get_med_flow():
+    """Get or create medical flow with lazy initialization"""
+    global _med_flow
+    if _med_flow is None:
+        try:
+            _med_flow = create_med_agent_flow()
+            logger.info("✅ Medical flow created successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to create medical flow: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to initialize medical flow: {str(e)}")
+    return _med_flow
+
+def get_oqa_flow():
+    """Get or create OQA orthodontist flow with lazy initialization"""
+    global _oqa_flow
+    if _oqa_flow is None:
+        try:
+            _oqa_flow = create_oqa_orthodontist_flow()
+            logger.info("✅ OQA orthodontist flow created successfully")
+        except Exception as e:
+            logger.error(f"❌ Failed to create OQA flow: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to initialize OQA flow: {str(e)}")
+    return _oqa_flow
 
 
 # Pydantic models
@@ -182,12 +206,30 @@ async def chat(
                     logger.info(
                         f"🔥 Running OQA flow (timeout: {timeout_config.FLOW_EXECUTION_TIMEOUT}s)"
                     )
-                    oqa_flow.run(shared)
+                    try:
+                        flow = get_oqa_flow()
+                        flow.run(shared)
+                    except Exception as e:
+                        logger.error(f"❌ OQA flow execution failed: {str(e)}")
+                        # Provide fallback response
+                        shared["explain"] = "Xin lỗi, có lỗi xảy ra khi xử lý câu hỏi chỉnh nha. Vui lòng thử lại sau."
+                        shared["suggestion_questions"] = []
+                        shared["input_type"] = "error"
+                        shared["need_clarify"] = False
                 else:
                     logger.info(
                         f"🔥 Running medical flow (timeout: {timeout_config.FLOW_EXECUTION_TIMEOUT}s)"
                     )
-                    med_flow.run(shared)
+                    try:
+                        flow = get_med_flow()
+                        flow.run(shared)
+                    except Exception as e:
+                        logger.error(f"❌ Medical flow execution failed: {str(e)}")
+                        # Provide fallback response
+                        shared["explain"] = "Xin lỗi, có lỗi xảy ra khi xử lý câu hỏi y khoa. Vui lòng thử lại sau."
+                        shared["suggestion_questions"] = []
+                        shared["input_type"] = "error"
+                        shared["need_clarify"] = False
         except FlowTimeoutError as e:
             logger.error(f"⏱️ Flow execution timeout: {e}")
             # Provide graceful timeout response to user
