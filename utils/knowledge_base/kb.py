@@ -7,7 +7,7 @@ import pandas as pd
 import numpy as np
 from rank_bm25 import BM25Okapi
 from unidecode import unidecode
-from ..role_enum import RoleEnum
+from ..role_enum import RoleEnum,ROLE_TO_CSV
 
 KB_COLUMNS = [
     "DEMUC",
@@ -19,12 +19,7 @@ KB_COLUMNS = [
     "GIAITHICH",  # Optional column - not all CSV files have this
 ]
 
-ROLE_TO_CSV = {
-    RoleEnum.PATIENT_DIABETES.value: "bndtd.csv",
-    RoleEnum.DOCTOR_ENDOCRINE.value: "bsnt.csv", 
-    RoleEnum.PATIENT_DENTAL.value: "bnrhm.csv",
-    RoleEnum.DOCTOR_DENTAL.value: "bsrhm.csv",
-}
+
 
 
 def _normalize_text(text: Any) -> str:
@@ -321,5 +316,97 @@ def retrieve_random_by_role(role: str, amount: int = 5) -> List[Dict[str, Any]]:
     """Retrieve random entries from KB based on user role"""
     kb = get_kb()
     return kb.get_random_by_role(role, amount)
+
+
+def prepare_metadata_for_role(role: str) -> pd.DataFrame:
+    """
+    Prepare metadata dataframe containing distinct DEMUC and CHUDECON for a given role.
+    This metadata will be fed to RAG agent to narrow down searching scope.
+
+    Args:
+        role: Role enum value (e.g., "patient_dental", "doctor_endocrine")
+
+    Returns:
+        DataFrame with columns: DEMUC, CHUDECON, SOLUONGCAUHOI
+
+    Example:
+        >>> metadata = prepare_metadata_for_role(RoleEnum.PATIENT_DENTAL.value)
+        >>> print(metadata.head())
+           DEMUC                      CHUDECON  SOLUONGCAUHOI
+        0  BỆNH LÝ RĂNG MIỆNG        Sâu răng              81
+        1  BỆNH LÝ RĂNG MIỆNG        Khô miệng             86
+    """
+    kb = get_kb()
+
+    # Find the appropriate CSV file for this role
+    csv_file = ROLE_TO_CSV.get(role)
+
+    if not csv_file or csv_file not in kb.role_dataframes:
+        # If role not found, return empty dataframe
+        return pd.DataFrame(columns=["DEMUC", "CHUDECON", "SOLUONGCAUHOI"])
+
+    # Get the role-specific dataframe
+    role_df = kb.role_dataframes[csv_file]
+
+    if len(role_df) == 0:
+        return pd.DataFrame(columns=["DEMUC", "CHUDECON", "SOLUONGCAUHOI"])
+
+    # Group by DEMUC and CHUDECON to get distinct values and count
+    metadata = (
+        role_df.groupby(["DEMUC", "CHUDECON"], dropna=False)
+        .size()
+        .reset_index(name="SOLUONGCAUHOI")
+    )
+
+    # Filter out empty DEMUC or CHUDECON and NaN values
+    metadata = metadata[
+        (metadata["DEMUC"].notna()) &
+        (metadata["CHUDECON"].notna()) &
+        (metadata["DEMUC"].str.strip() != "") &
+        (metadata["CHUDECON"].str.strip() != "")
+    ]
+
+    # Sort by DEMUC and CHUDECON for consistent ordering
+    metadata = metadata.sort_values(["DEMUC", "CHUDECON"]).reset_index(drop=True)
+
+    return metadata
+
+
+@lru_cache(maxsize=128)
+def get_cached_metadata_for_role(role: str) -> Tuple[Tuple[Tuple[str, Any], ...], ...]:
+    """
+    Cached version of prepare_metadata_for_role that returns hashable structure.
+
+    Args:
+        role: Role enum value
+
+    Returns:
+        Tuple representation of metadata DataFrame for caching
+    """
+    metadata_df = prepare_metadata_for_role(role)
+
+    # Convert DataFrame to hashable tuple structure
+    return tuple(
+        tuple(row) for row in metadata_df.itertuples(index=False, name=None)
+    )
+
+
+def get_metadata_for_role(role: str) -> pd.DataFrame:
+    """
+    Get metadata for a role with caching support.
+
+    Args:
+        role: Role enum value
+
+    Returns:
+        DataFrame with metadata
+    """
+    cached = get_cached_metadata_for_role(role)
+
+    if not cached:
+        return pd.DataFrame(columns=["DEMUC", "CHUDECON", "SOLUONGCAUHOI"])
+
+    # Convert back to DataFrame
+    return pd.DataFrame(cached, columns=["DEMUC", "CHUDECON", "SOLUONGCAUHOI"])
 
 
