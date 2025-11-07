@@ -5,10 +5,8 @@ Node definitions for medical chatbot flows
 from .medical_nodes import (
     IngestQuery,
     MainDecisionAgent,
-    ScoreDecisionNode,
     RetrieveFromKB,
     ComposeAnswer,
-    ClarifyQuestionNode,
     GreetingResponse,
     FallbackNode,
     ChitChatRespond,
@@ -27,10 +25,8 @@ __all__ = [
     # Medical nodes
     "IngestQuery",
     "MainDecisionAgent",
-    "ScoreDecisionNode",
     "RetrieveFromKB",
     "ComposeAnswer",
-    "ClarifyQuestionNode",
     "GreetingResponse",
     "FallbackNode",
     "ChitChatRespond",
