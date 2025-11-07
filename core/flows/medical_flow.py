@@ -1,7 +1,8 @@
 from pocketflow import Flow
 from core.nodes.medical_nodes import (
-    IngestQuery, MainDecisionAgent, ScoreDecisionNode, RetrieveFromKB,
-    ComposeAnswer, ClarifyQuestionNode, GreetingResponse, FallbackNode, ChitChatRespond,
+    IngestQuery, MainDecisionAgent, TopicClassifyAgent, QueryExpandAgent, 
+    RagAgent, RetrieveFromKB, ComposeAnswer, GreetingResponse, 
+    FallbackNode, ChitChatRespond,
 )
 from core.nodes.oqa_nodes import (
     OQAIngestDefaults, OQAClassifyEN, OQARetrieve,
@@ -22,49 +23,57 @@ else:
     logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
 
 def create_med_agent_flow():
-    logger.info("[Flow] Tạo medical agent flow với modular architecture")
-    
+    logger.info("[Flow] Tạo medical agent flow với RagAgent làm decision maker chính")
+
     # Create nodes
     ingest = IngestQuery()
     main_decision = MainDecisionAgent()
+    rag_agent = RagAgent()
+    topic_classify = TopicClassifyAgent()
+    query_expand = QueryExpandAgent()
     retrieve_kb = RetrieveFromKB()
-    score_decision = ScoreDecisionNode()
     compose_answer = ComposeAnswer()
-    clarify_question = ClarifyQuestionNode()
-    greeting = GreetingResponse()
     fallback = FallbackNode()
     chitchat = ChitChatRespond()
-    logger.info("[Flow] Kết nối nodes theo luồng mới")
     
-    # Main flow: Ingest → MainDecision
+    logger.info("[Flow] Kết nối nodes theo flow mới: Ingest → MainDecision → RagAgent (orchestrator)")
+
+    # Step 1: Ingest → MainDecision
     ingest >> main_decision
-    
-    # From MainDecision, route based on classification
-    main_decision - "retrieve_kb" >> retrieve_kb
-    # main_decision no longer routes directly to topic_suggest
-    main_decision - "greeting" >> greeting
+
+    # Step 2: From MainDecision - route to RagAgent or Chitchat
+    main_decision - "retrieve_kb" >> rag_agent
     main_decision - "chitchat" >> chitchat
     main_decision - "fallback" >> fallback
-    # From RetrieveKB, check score and decide
-    retrieve_kb >> score_decision
-    
-    # From ScoreDecision, route to appropriate action
-    score_decision - "compose_answer" >> compose_answer
-    score_decision - "clarify" >> clarify_question
 
-    # ComposeAnswer is terminal by default, but can route to fallback if API overloaded
+    # Step 3: RagAgent orchestrates the pipeline
+    # RagAgent can route to: classify, expand, retrieve, or compose_answer
+    
+    # Route to TopicClassifyAgent for metadata extraction
+    rag_agent - "classify" >> topic_classify
+    topic_classify >> rag_agent  # Route back to RagAgent
+    topic_classify - "fallback" >> fallback
+    
+    # Route to QueryExpandAgent for query expansion
+    rag_agent - "expand" >> query_expand
+    query_expand >> rag_agent  # Route back to RagAgent
+    query_expand - "fallback" >> fallback
+    
+    # Route to RetrieveFromKB for data retrieval
+    rag_agent - "retrieve" >> retrieve_kb
+    retrieve_kb >> rag_agent  # Route back to RagAgent
+    
+    # Route to ComposeAnswer when ready
+    rag_agent - "compose_answer" >> compose_answer
     compose_answer - "fallback" >> fallback
-    # compose_answer with "default" action is terminal (no routing needed)
+    # compose_answer with "default" action is terminal
 
     # ChitChat can route to fallback if API overloaded
     chitchat - "fallback" >> fallback
     # chitchat with "default" action is terminal
 
-    # ClarifyQuestion is terminal (no routing needed)
-    
-   
     flow = Flow(start=ingest)
-    logger.info("[Flow] Medical agent flow với modular architecture đã được tạo thành công")
+    logger.info("[Flow] Medical agent flow mới với RagAgent orchestrator đã được tạo thành công")
     return flow
 
 
@@ -76,7 +85,6 @@ def create_oqa_orthodontist_flow():
     ingest = OQAIngestDefaults()
     classify = OQAClassifyEN()
     retrieve = OQARetrieve()
-    score = ScoreDecisionNode()  # Only reuse ScoreDecisionNode as it's generic
     compose = OQAComposeAnswerVIWithSources()
     clarify = OQAClarify()
     chitchat = OQAChitChat()  # OQA-specific chitchat
