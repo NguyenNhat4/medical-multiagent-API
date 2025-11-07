@@ -391,7 +391,7 @@ def get_cached_metadata_for_role(role: str) -> Tuple[Tuple[Tuple[str, Any], ...]
     )
 
 
-def get_metadata_for_role(role: str) -> pd.DataFrame:
+def get_df_metadata_for_role(role: str) -> pd.DataFrame:
     """
     Get metadata for a role with caching support.
 
