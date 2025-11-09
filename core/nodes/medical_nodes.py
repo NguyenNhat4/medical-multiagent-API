@@ -511,16 +511,16 @@ class ComposeAnswer(Node):
 
 class TopicClassifyAgent(Node):
     """
-    Agent phân loại chủ đề 2 bước: DEMUC -> CHU_DE_CON
+    Agent phân loại chủ đề chính (DEMUC only).
 
     Refactored to follow PocketFlow best practices:
     - prep(): Read from shared store ONLY (no DB/API calls)
-    - exec(): Call utility functions for 2-step classification
+    - exec(): Call utility functions to classify DEMUC based on role's CSV file
     - post(): Write to shared store ONLY
 
-    Two-step classification:
-    1. If no DEMUC: Classify DEMUC from query
-    2. If have DEMUC: Classify CHU_DE_CON within that DEMUC
+    Classification:
+    - Classify DEMUC from query based on role
+    - CHU_DE_CON is always left empty (not classified)
     """
 
     def prep(self, shared):
@@ -541,106 +541,60 @@ class TopicClassifyAgent(Node):
 
         from utils.knowledge_base.metadata_utils import (
             get_demuc_list_for_role,
-            get_chu_de_con_for_demuc,
-            format_demuc_list_for_prompt,
-            format_chu_de_con_list_for_prompt
+            format_demuc_list_for_prompt
         )
-        from utils.llm.classify_topic import (
-            classify_demuc_with_llm,
-            classify_chu_de_con_with_llm
+        from utils.llm.classify_topic import classify_demuc_with_llm
+
+        # Only classify DEMUC (no CHU_DE_CON classification)
+        logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classifying DEMUC for query: '{query[:50]}...'")
+
+        # Get DEMUC list for role
+        demuc_list = get_demuc_list_for_role(role)
+        if not demuc_list:
+            logger.warning(f"🏷️ [TopicClassifyAgent] EXEC - No DEMUC list found for role '{role}'")
+            return {"demuc": "", "chu_de_con": "", "confidence": "low"}
+
+        demuc_list_str = format_demuc_list_for_prompt(demuc_list)
+        logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available DEMUCs: {demuc_list}")
+
+        # Classify DEMUC
+        demuc_result = classify_demuc_with_llm(
+            query=query,
+            role=role,
+            demuc_list_str=demuc_list_str
         )
 
-        # Step 1: Classify DEMUC if not present
-        if not current_demuc:
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - STEP 1: Classifying DEMUC for query: '{query[:50]}...'")
+        if demuc_result.get("api_overload"):
+            return {"demuc": "", "chu_de_con": "", "confidence": "low", "api_overload": True}
 
-            # Get DEMUC list for role
-            demuc_list = get_demuc_list_for_role(role)
-            if not demuc_list:
-                logger.warning(f"🏷️ [TopicClassifyAgent] EXEC - No DEMUC list found for role '{role}'")
-                return {"demuc": "", "chu_de_con": "", "confidence": "low"}
+        classified_demuc = demuc_result.get("demuc", "")
+        logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC='{classified_demuc}'")
 
-            demuc_list_str = format_demuc_list_for_prompt(demuc_list)
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available DEMUCs: {demuc_list}")
-
-            # Classify DEMUC
-            demuc_result = classify_demuc_with_llm(
-                query=query,
-                role=role,
-                demuc_list_str=demuc_list_str
-            )
-            
-            if demuc_result.get("api_overload"):
-                return {"demuc": "", "chu_de_con": "", "confidence": "low", "api_overload": True}
-
-            classified_demuc = demuc_result.get("demuc", "")
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - STEP 1 result: DEMUC='{classified_demuc}'")
-
-            # Return with only DEMUC for now - CHU_DE_CON will be classified in next run
-            return {
-                "demuc": classified_demuc,
-                "chu_de_con": "",  # Will be classified in next step
-                "confidence": demuc_result.get("confidence", "low"),
-                "reason": demuc_result.get("reason", "")
-            }
-
-        # Step 2: Classify CHU_DE_CON within current DEMUC
-        else:
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - STEP 2: Classifying CHU_DE_CON within DEMUC='{current_demuc}'")
-
-            # Get CHU_DE_CON list for this DEMUC
-            chu_de_con_list = get_chu_de_con_for_demuc(role, current_demuc)
-            if not chu_de_con_list:
-                logger.warning(f"🏷️ [TopicClassifyAgent] EXEC - No CHU_DE_CON found for DEMUC '{current_demuc}' in role '{role}'")
-                return {"demuc": current_demuc, "chu_de_con": "", "confidence": "low"}
-
-            chu_de_con_list_str = format_chu_de_con_list_for_prompt(chu_de_con_list)
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available CHU_DE_CONs: {chu_de_con_list}")
-
-            # Classify CHU_DE_CON
-            chu_de_con_result = classify_chu_de_con_with_llm(
-                query=query,
-                demuc=current_demuc,
-                chu_de_con_list_str=chu_de_con_list_str
-            )
-
-            if chu_de_con_result.get("api_overload"):
-                return {"demuc": current_demuc, "chu_de_con": "", "confidence": "low", "api_overload": True}
-
-            classified_chu_de_con = chu_de_con_result.get("chu_de_con", "")
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - STEP 2 result: CHU_DE_CON='{classified_chu_de_con}'")
-
-            return {
-                "demuc": current_demuc,  # Keep existing DEMUC
-                "chu_de_con": classified_chu_de_con,
-                "confidence": chu_de_con_result.get("confidence", "low"),
-                "reason": chu_de_con_result.get("reason", "")
-            }
+        # Return with DEMUC only (no CHU_DE_CON)
+        return {
+            "demuc": classified_demuc,
+            "chu_de_con": "",  # Always empty - we don't classify CHU_DE_CON
+            "confidence": demuc_result.get("confidence", "low"),
+            "reason": demuc_result.get("reason", "")
+        }
 
     def post(self, shared, prep_res, exec_res):
         logger.info(f"🏷️ [TopicClassifyAgent] POST - Classification result: {exec_res}")
 
         # Update shared with classification results - WRITE ONLY
         shared["demuc"] = exec_res.get("demuc", "")
-        shared["chu_de_con"] = exec_res.get("chu_de_con", "")
+        shared["chu_de_con"] = exec_res.get("chu_de_con", "")  # Always empty now
         shared["classification_confidence"] = exec_res.get("confidence", "low")
 
-        logger.info(f"🏷️ [TopicClassifyAgent] POST - Updated: DEMUC='{shared['demuc']}', CHU_DE_CON='{shared['chu_de_con']}'")
+        logger.info(f"🏷️ [TopicClassifyAgent] POST - Updated: DEMUC='{shared['demuc']}'")
 
         # Check for API overload
         if exec_res.get("api_overload", False):
             return "fallback"
 
-        # Check if we need another round
-        # If we have DEMUC but not CHU_DE_CON, route back to classify again
-        if shared["demuc"] and not shared["chu_de_con"]:
-            logger.info("🏷️ [TopicClassifyAgent] POST - Have DEMUC but no CHU_DE_CON, route back to classify again")
-            return "classify_again"  # This action should route back to TopicClassifyAgent
-
-        # Both DEMUC and CHU_DE_CON are classified
-        shared["rag_state"] = "classified"
-        logger.info("🏷️ [TopicClassifyAgent] POST - Classification complete, routing back to RagAgent")
-        return "default"
+        # Classification complete - proceed to retrieval
+        logger.info("🏷️ [TopicClassifyAgent] POST - Classification complete, routing to retrieval")
+        return "default"  # Go to next node (RetrieveFromKB)
 
 
 class QueryExpandAgent(Node):

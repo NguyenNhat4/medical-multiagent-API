@@ -17,7 +17,7 @@ def create_retrieve_flow(fallback_node):
     Create a reusable retrieval sub-flow: topic_classify → retrieve_kb → filter_agent
 
     This flow handles:
-    1. Topic classification (2-step: DEMUC → CHU_DE_CON)
+    1. Topic classification (DEMUC only)
     2. Retrieval from knowledge base
     3. Filtering candidates
 
@@ -37,9 +37,8 @@ def create_retrieve_flow(fallback_node):
     filter_agent = FilterAgent()
 
     # Connect retrieval pipeline
-    # topic_classify handles 2-step classification with "classify_again" loop
+    # topic_classify classifies DEMUC only, then proceeds to retrieval
     topic_classify >> retrieve_kb
-    topic_classify - "classify_again" >> topic_classify  # Loop for 2-step classification
     topic_classify - "fallback" >> fallback_node
 
     # retrieve_kb → filter_agent

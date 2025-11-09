@@ -258,5 +258,5 @@ if __name__ == "__main__":
         if full_qa:
             print("\nFirst QA pair:")
             qa = full_qa[0]
-            print(f"Q: {qa['CAUHOI']}")
-            print(f"A: {qa['CAUTRALOI'][:150]}...")
+            print(f"Q: {qa.get('CAUHOI', 'N/A')}")
+            print(f"A: {qa.get('CAUTRALOI', 'N/A')[:150]}...")
