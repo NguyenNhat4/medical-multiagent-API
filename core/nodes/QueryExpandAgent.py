@@ -24,21 +24,11 @@ class QueryExpandAgent(Node):
         logger.info("🔍 [QueryExpandAgent] PREP - Đọc query và context")
         query = shared.get("query", "").strip()
         role = shared.get("role", "")
-        conversation_history = shared.get("conversation_history", [])
+        formatted_history = shared.get("formatted_conversation_history", "")
         demuc = shared.get("demuc", "")
         chu_de_con = shared.get("chu_de_con", "")
 
-        # Format conversation history
-        history_lines = []
-        for msg in conversation_history[-6:]:
-            try:
-                who = msg.get("role")
-                content = msg.get("content", "")
-                history_lines.append(f"- {who}: {content}")
-            except Exception:
-                continue
-        formatted_history = "\n".join(history_lines)
-
+        logger.info(f"🔍 [QueryExpandAgent] PREP - Query: {query[:50]}..., Has history: {bool(formatted_history)}")
         return query, role, demuc, chu_de_con, formatted_history
 
     def exec(self, inputs):

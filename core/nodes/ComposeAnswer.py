@@ -35,7 +35,7 @@ class ComposeAnswer(Node):
         query = shared.get("query", "")
         selected_ids = shared.get("selected_ids", [])
         score = shared.get("retrieval_score", 0.0)
-        conversation_history = shared.get("conversation_history", [])
+        formatted_history = shared.get("formatted_conversation_history", "")
 
         # Map role to collection name
         collection_name = ROLE_TO_COLLECTION.get(role, "bnrhm")
@@ -50,19 +50,19 @@ class ComposeAnswer(Node):
             logger.warning("✍️ [ComposeAnswer] PREP - No selected IDs, using empty list")
             retrieved_qa = []
 
-        return (role, query, retrieved_qa, score, conversation_history)
+        return (role, query, retrieved_qa, score, formatted_history)
 
     def exec(self, inputs):
         # Import dependencies only when needed
         import time
         from utils.role_enum import PERSONA_BY_ROLE
-        from utils.helpers import format_kb_qa_list, format_conversation_history
+        from utils.helpers import format_kb_qa_list
         from utils.llm import call_llm, PROMPT_COMPOSE_ANSWER
         from utils.parsing import parse_yaml_with_schema
         from utils.auth import APIOverloadException
         from config.timeout_config import timeout_config
 
-        role, query, retrieved,  score, conversation_history = inputs
+        role, query, retrieved, score, formatted_history = inputs
 
         # Handle missing or invalid role with fallback
         if role not in PERSONA_BY_ROLE:
@@ -73,16 +73,13 @@ class ComposeAnswer(Node):
         # Compact KB context
         relevant_info_from_kb = format_kb_qa_list(retrieved, max_items=6)
 
-        # Format conversation history
-        formatted_history = format_conversation_history(conversation_history)
-
         prompt = PROMPT_COMPOSE_ANSWER.format(
             ai_role=persona['persona'],
             audience=persona['audience'],
             tone=persona['tone'],
             query=query,
             relevant_info_from_kb=relevant_info_from_kb if relevant_info_from_kb else "Không có thông tin từ cơ sở tri thức",
-            conversation_history = formatted_history
+            conversation_history=formatted_history if formatted_history else "Không có lịch sử hội thoại"
         )
         logger.info(f"✍️ [ComposeAnswer] EXEC - prompt: {prompt}")
 
