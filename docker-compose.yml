@@ -57,13 +57,25 @@ services:
       - DATABASE_URL=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - QDRANT_URL=http://${QDRANT_HOST}:${QDRANT_PORT}   # <— thêm dòng này
     volumes:
-      - ./logs:/app/logs
+      - .:/app
     networks:
       - chatbot-network
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["python", "start_api.py"]
+    # Run uvicorn directly with reload so code changes on the host trigger hot reload in the container
+    command: [
+      "uvicorn", "app:app",
+      "--host", "0.0.0.0",
+      "--port", "8000",
+      "--reload",
+      "--reload-dir", "api",
+      "--reload-dir", "core",
+      "--reload-dir", "utils",
+      "--reload-exclude", "*.log",
+      "--reload-exclude", "__pycache__",
+      "--reload-exclude", ".git"
+    ]
     restart: unless-stopped
 
 networks:
