@@ -44,7 +44,7 @@ def retrieve_from_qdrant(
     chu_de_con: Optional[str] = None,
     top_k: int = 20,
     collection_name: str = "bnrhm",
-    qdrant_url: str = os.getenv("DATABASE_URL")
+    qdrant_url: str = os.getenv("QDRANT_URL")
 ) -> List[Dict[str, Any]]:
     """
     Retrieve documents from Qdrant using hybrid search (dense + sparse + late interaction).
