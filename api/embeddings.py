@@ -9,6 +9,7 @@ from pydantic import BaseModel, Field
 
 from utils.timezone_utils import get_vietnam_time
 import os
+import socket
 from qdrant_client import QdrantClient
 from utils.knowledge_base.loadvector_qdrant import (
     EmbeddingModels,
@@ -271,3 +272,41 @@ async def get_collection_status(collection_name: str):
             status_code=500,
             detail=f"Error getting collection status: {str(e)}"
         )
+
+
+@router.get("/dns-test")
+async def dns_test(hostname: str = "qdrant", port: int = 6333):
+    """
+    Test DNS resolution and basic TCP connectivity from inside the API container.
+
+    - hostname: the host to resolve (default: "qdrant")
+    - port: TCP port to try connecting (default: 6333)
+    """
+    resolved_ip = None
+    resolved = False
+    connect_ok = False
+    connect_error = None
+
+    try:
+        resolved_ip = socket.gethostbyname(hostname)
+        resolved = True
+    except Exception as e:
+        connect_error = f"DNS error: {e}"
+
+    if resolved:
+        try:
+            with socket.create_connection((resolved_ip, port), timeout=2):
+                connect_ok = True
+        except Exception as e:
+            connect_error = f"TCP connect error: {e}"
+
+    return {
+        "hostname": hostname,
+        "port": port,
+        "resolved": resolved,
+        "ip": resolved_ip,
+        "connect_ok": connect_ok,
+        "error": connect_error,
+        "env_QDRANT_URL": os.getenv("QDRANT_URL"),
+        "timestamp": get_vietnam_time().isoformat(),
+    }
