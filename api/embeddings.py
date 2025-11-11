@@ -31,7 +31,7 @@ class CollectionLoadRequest(BaseModel):
     collections: Optional[List[str]] = Field(
         None,
         description="List of specific collections to load. If None, all collections will be loaded.",
-        example=["bndtd", "bsnt" ,]
+        example=["bndtd", "bsnt" , "bsrhm","bnrhm"]
     )
     recreate: bool = Field(
         False,

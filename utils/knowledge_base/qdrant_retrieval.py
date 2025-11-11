@@ -76,7 +76,7 @@ def retrieve_from_qdrant(
     Necessity: Used by RetrieveFromKB node to get relevant QA pairs from vector DB
     """
     try:
-        logger.info(f"[retrieve_from_qdrant] Query: '{query[:50]}...', DEMUC: '{demuc}', CHU_DE_CON: '{chu_de_con}'")
+        logger.info(f"[retrieve_from_qdrant] Query: '{query}...', DEMUC: '{demuc}', CHU_DE_CON: '{chu_de_con}'")
 
         # Get embedding models
         dense_model, sparse_model, late_interaction_model = _get_embedding_models()

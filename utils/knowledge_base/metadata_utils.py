@@ -8,6 +8,7 @@ have clear input/output contracts.
 
 import logging
 from typing import Dict, Any, List
+from pathlib import Path
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -39,13 +40,15 @@ def get_demuc_list_for_role(role: str) -> List[str]:
             return []
 
         # Read directly from role-specific CSV (same source as Qdrant)
-        csv_path = f"medical_knowledge_base/{csv_file}"
-        df = pd.read_csv(csv_path, encoding="utf-8-sig")
+        # Build a robust absolute path so it works regardless of CWD (tests, docker, IDE)
+        project_root = Path(__file__).resolve().parents[2]
+        csv_path = project_root / "medical_knowledge_base" / csv_file
+        df = pd.read_csv(str(csv_path), encoding="utf-8-sig")
 
         # Get unique DEMUC list
         demuc_list = sorted(df["DEMUC"].unique().tolist())
 
-        logger.info(f"Loaded {len(demuc_list)} DEMUCs from {csv_file} for role '{role}': {demuc_list}")
+        logger.info(f"Loaded {len(demuc_list)} DEMUCs from {csv_path} for role '{role}': {demuc_list}")
         return demuc_list
 
     except Exception as e:
@@ -82,8 +85,10 @@ def get_chu_de_con_for_demuc(role: str, demuc: str) -> List[str]:
             return []
 
         # Read directly from role-specific CSV (same source as Qdrant)
-        csv_path = f"medical_knowledge_base/{csv_file}"
-        df = pd.read_csv(csv_path, encoding="utf-8-sig")
+        # Build a robust absolute path so it works regardless of CWD (tests, docker, IDE)
+        project_root = Path(__file__).resolve().parents[2]
+        csv_path = project_root / "medical_knowledge_base" / csv_file
+        df = pd.read_csv(str(csv_path), encoding="utf-8-sig")
 
         # Filter for specific DEMUC and get unique CHU_DE_CON list
         filtered_df = df[df["DEMUC"] == demuc]

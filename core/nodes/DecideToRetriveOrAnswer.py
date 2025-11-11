@@ -64,14 +64,14 @@ Nếu chọn direct_response:
 ```yaml
 type: direct_response
 explanation: "Câu trả lời của bạn ở đây"
-new_query: "<để trống nếu type là direct_response>"
+new_query: "<phải để trống>"
 ```
 
 Nếu chọn retrieve_kb (cần tra KB):
 ```yaml
 type: retrieve_kb
-explanation: "<để trống nếu type là retrieve_kb >"
-new_query: "< user input mới dùng để tra tra kiến thức y tế nếu input hiện tại chưa rõ. >"
+explanation: "<phải để trống>"
+new_query: "<viết lại user input cho rõ ràng nếu chưa.>"
 ```
 """
 
