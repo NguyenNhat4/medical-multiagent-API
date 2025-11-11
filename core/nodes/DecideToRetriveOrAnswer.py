@@ -55,9 +55,10 @@ user input: "{query}"
 
 Chọn 1 trong 2 Hành động:
 - direct_response: trao đổi xuồng sả, hỏi để biết người dùng cần hỗ trợ gì về y tế
-- retrieve_kb: tra kiến thức y tế bác sĩ chuẩn bị trước khi trả lời câu hỏi y tế
+- retrieve_kb: tra cơ sở tri thức y tế bác sĩ chuẩn bị trước khi trả lời câu hỏi y tế
 Lưu ý:
 - Hãy dựa vào ngữ cảnh hội thoại để hiểu câu hỏi và quyết định phù hợp
+- trong cơ sở tri thức chỉ dùng một term chung là "Đái Tháo Đường". 
 Trả về YAML:
 Nếu chọn direct_response:
 ```yaml
