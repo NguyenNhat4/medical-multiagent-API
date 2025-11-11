@@ -33,7 +33,7 @@ def get_demuc_list_for_role(role: str) -> List[str]:
         from utils.role_enum import ROLE_TO_CSV
 
         # Get CSV file for this role
-        csv_file = ROLE_TO_CSV.get(role)
+        csv_file = ROLE_TO_CSV.get(role,"")
 
         if not csv_file:
             logger.warning(f"No CSV file mapping found for role '{role}'")
@@ -44,10 +44,10 @@ def get_demuc_list_for_role(role: str) -> List[str]:
         project_root = Path(__file__).resolve().parents[2]
         csv_path = project_root / "medical_knowledge_base" / csv_file
         df = pd.read_csv(str(csv_path), encoding="utf-8-sig")
-
+        logger.info(csv_path)
         # Get unique DEMUC list
-        demuc_list = sorted(df["DEMUC"].unique().tolist())
-
+        demuc_list =  df["DEMUC"].dropna().unique().tolist() 
+        logger.info("test:",(df["DEMUC"].unique().tolist()))
         logger.info(f"Loaded {len(demuc_list)} DEMUCs from {csv_path} for role '{role}': {demuc_list}")
         return demuc_list
 
