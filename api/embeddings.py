@@ -143,7 +143,7 @@ async def load_embeddings(
             )
 
         # Load embedding models
-        logger.info("🤖 Loading embedding models...")
+        logger.info("  Loading embedding models...")
         models = EmbeddingModels()
         models.load()
         logger.info("✅ Embedding models loaded successfully")

@@ -32,7 +32,7 @@ class RagAgent(Node):
     """
 
     def prep(self, shared):
-        logger.info("🤖 [RagAgent] PREP - Analyzing current state and making decision")
+        logger.info("  [RagAgent] PREP - Analyzing current state and making decision")
         query = shared.get("query", "")
         user_role = shared.get("role", "")
         demuc = shared.get("demuc", "")
@@ -54,7 +54,7 @@ class RagAgent(Node):
                 if qid in candidate_map
             ]
 
-        logger.info(f"🤖 [RagAgent] PREP - state='{rag_state}', query='{query[:50]}...', {len(filtered_questions)} filtered questions, attempts={retrieve_attempts}")
+        logger.info(f"  [RagAgent] PREP - state='{rag_state}', query='{query[:50]}...', {len(filtered_questions)} filtered questions, attempts={retrieve_attempts}")
         return query, user_role, demuc, chu_de_con, rag_state, filtered_questions, expansion_tried, retrieve_attempts
 
     def exec(self, inputs):
@@ -64,7 +64,7 @@ class RagAgent(Node):
         from config.timeout_config import timeout_config
 
         query, user_role, demuc, chu_de_con, rag_state, filtered_questions, expansion_tried, retrieve_attempts = inputs
-        logger.info(f"🤖 [RagAgent] EXEC - Current state: {rag_state}, {len(filtered_questions)} questions, attempts: {retrieve_attempts}")
+        logger.info(f"  [RagAgent] EXEC - Current state: {rag_state}, {len(filtered_questions)} questions, attempts: {retrieve_attempts}")
 
         # Format filtered questions for LLM
         questions_str = ""
@@ -117,14 +117,14 @@ reason: "..."
             if result["next_action"] not in valid_actions:
                 raise ValueError(f"Invalid action: {result['next_action']}")
 
-            logger.info(f"🤖 [RagAgent] Decision: {result['next_action']} - {result['reason']}")
+            logger.info(f"  [RagAgent] Decision: {result['next_action']} - {result['reason']}")
             return result
 
         except APIOverloadException:
-            logger.error("🤖 [RagAgent] API overloaded")
+            logger.error("  [RagAgent] API overloaded")
             raise
         except Exception as e:
-            logger.error(f"🤖 [RagAgent] Error: {e}")
+            logger.error(f"  [RagAgent] Error: {e}")
             raise
 
     def post(self, shared, prep_res, exec_res):
@@ -132,19 +132,19 @@ reason: "..."
         reason = exec_res.get("reason", "")
         current_attempts = shared.get("retrieve_attempts", 0)
 
-        logger.info(f"🤖 [RagAgent] POST - Next action: '{next_action}' | Reason: {reason} | Current attempts: {current_attempts}")
+        logger.info(f"  [RagAgent] POST - Next action: '{next_action}' | Reason: {reason} | Current attempts: {current_attempts}")
 
         # Update state based on next action
         if next_action == "retry_retrieve":
             # Increment retrieve attempts counter
             shared["retrieve_attempts"] = current_attempts + 1
             shared["rag_state"] = "init"  # Reset to init for retrieve_flow to start fresh
-            logger.info(f"🤖 [RagAgent] POST - Retrying retrieval pipeline (attempt {current_attempts + 1}/2)")
+            logger.info(f"  [RagAgent] POST - Retrying retrieval pipeline (attempt {current_attempts + 1}/2)")
             return "retry_retrieve"
         elif next_action == "compose_answer":
             shared["rag_state"] = "composing"
-            logger.info("🤖 [RagAgent] POST - Proceeding to compose answer")
+            logger.info("  [RagAgent] POST - Proceeding to compose answer")
             return "compose_answer"
         else:
-            logger.warning(f"🤖 [RagAgent] POST - Unknown action '{next_action}', defaulting to compose_answer")
+            logger.warning(f"  [RagAgent] POST - Unknown action '{next_action}', defaulting to compose_answer")
             return "compose_answer"

@@ -54,7 +54,7 @@ flowchart TD
         RetrieveKB --> FilterAgent
     end
 
-    RagAgent[RagAgent<br/>🤖 Decision Agent]
+    RagAgent[RagAgent<br/>  Decision Agent]
     ComposeAnswer[ComposeAnswer<br/>✍️ Response Generation]
     Fallback[FallbackNode<br/>🔄 Fallback Handling]
 

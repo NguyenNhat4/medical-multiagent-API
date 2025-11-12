@@ -68,6 +68,7 @@ class RetrieveFromKB(Node):
             top_k=20,
             collection_name=collection_name
         )
+        logger.info(f"📚 [RetrieveFromKB] retrieve results: {retrieved_results}")
 
         # Extract lightweight candidates: {id, CAUHOI}
         candidates = [

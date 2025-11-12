@@ -65,7 +65,7 @@ Danh sách Q&A đã retrieve:
 {relevant_info_from_kb}
 
 NHIỆM VỤ
-1) -   Không chào, đi thẳng vào câu trả lời
+1) -   Không chào, đi thẳng vào câu trả lời,không tự trả lời nếu Q&A rỗng hoặc không đủ thông tin.
   - Văn phong phù hợp cho {audience}, giọng {tone}.
    - Kết thúc bằng một dòng tóm lược bắt đầu bằng “👉 Tóm lại,”.
 2) `suggestion_questions` là các câu hỏi gợi hướng tiếp theo cho người dùng.
