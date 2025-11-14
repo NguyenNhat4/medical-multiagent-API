@@ -21,11 +21,11 @@ class DecideToRetriveOrAnswer(Node):
     """Main decision agent - ONLY decides between RAG agent or chitchat agent"""
 
     def prep(self, shared):
-        logger.info("[MainDecision] PREP - Đọc query và formatted history để phân loại RAG vs chitchat")
+        logger.info("[DecideToRetriveOrAnswer] PREP - Đọc query và formatted history để phân loại RAG vs chitchat")
         query = shared.get("query", "").strip()
         role = shared.get("role", "")
         formatted_history = shared.get("formatted_conversation_history", "")
-        logger.info(f"[MainDecision] PREP - Query: {query[:50]}..., Has history: {bool(formatted_history)}")
+        logger.info(f"[DecideToRetriveOrAnswer] PREP - Query: {query[:50]}..., Has history: {bool(formatted_history)}")
         return query, role, formatted_history
 
     def exec(self, inputs):
@@ -36,7 +36,7 @@ class DecideToRetriveOrAnswer(Node):
         from config.timeout_config import timeout_config
 
         query, role, formatted_history = inputs
-        logger.info("[MainDecision] EXEC - Deciding and responding")
+        logger.info("[DecideToRetriveOrAnswer] EXEC - Deciding and responding")
 
         # Build conversation history context if available
         history_context = ""
@@ -75,9 +75,9 @@ explanation: "<phải để trống>"
 new_query: "< Viết lại user input cho rõ ràng, chỉ khi nó mơ hồ.>"
 ```
 """
+        logger.info(f"[DecideToRetriveOrAnswer] prompt: {prompt}")
 
         try:
-            logger.log(f"[DecideToRetriveOrAnswer] prompt: {prompt}")
             resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
 
             result = parse_yaml_with_schema(
@@ -91,19 +91,19 @@ new_query: "< Viết lại user input cho rõ ràng, chỉ khi nó mơ hồ.>"
             explanation = result.get("explanation", "")
             new_query = result.get("new_query", "")
 
-            logger.info(f"[MainDecision] EXEC - Type: {decision_type}, Explanation length: {len(explanation)}, New query: '{new_query if new_query else 'N/A'}...'")
+            logger.info(f"[DecideToRetriveOrAnswer] EXEC - Type: {decision_type}, Explanation length: {len(explanation)}, New query: '{new_query if new_query else 'N/A'}...'")
 
             return {"type": decision_type, "explanation": explanation, "new_query": new_query}
 
         except APIOverloadException as e:
-            logger.warning(f"[MainDecision] EXEC - API overloaded, triggering fallback: {e}")
+            logger.warning(f"[DecideToRetriveOrAnswer] EXEC - API overloaded, triggering fallback: {e}")
             return {"type": "api_overload", "explanation": "", "new_query": ""}
         except Exception as e:
-            logger.warning(f"[MainDecision] EXEC - LLM classification failed: {e}")
+            logger.warning(f"[DecideToRetriveOrAnswer] EXEC - LLM classification failed: {e}")
             return {"type": "default", "explanation": "", "new_query": ""}
 
     def post(self, shared, prep_res, exec_res):
-        logger.info(f"[MainDecision] POST - Classification result: {exec_res}")
+        logger.info(f"[DecideToRetriveOrAnswer] POST - Classification result: {exec_res}")
         input_type = exec_res.get("type", "")
         explanation = exec_res.get("explanation", "")
         new_query = exec_res.get("new_query", "")
@@ -117,7 +117,7 @@ new_query: "< Viết lại user input cho rõ ràng, chỉ khi nó mơ hồ.>"
             }
             shared["explain"] = explanation
             shared["suggestion_questions"] = []
-            logger.info(f"[MainDecision] POST - Direct response saved to 'explain': {explanation[:80]}...")
+            logger.info(f"[DecideToRetriveOrAnswer] POST - Direct response saved to 'explain': {explanation[:80]}...")
             return "direct_response"
         elif input_type == "retrieve_kb":
             # Update query if new_query is provided (context-aware query enhancement)
@@ -125,18 +125,18 @@ new_query: "< Viết lại user input cho rõ ràng, chỉ khi nó mơ hồ.>"
             if new_query and new_query.strip():
                 shared["original_query"] = original_query
                 shared["query"] = new_query.strip()
-                logger.info(f"[MainDecision] POST - Query updated from '{original_query[:50]}...' to '{new_query[:50]}...'")
+                logger.info(f"[DecideToRetriveOrAnswer] POST - Query updated from '{original_query[:50]}...' to '{new_query[:50]}...'")
             else:
-                logger.info(f"[MainDecision] POST - No query update, keeping original: '{original_query[:50]}...'")
+                logger.info(f"[DecideToRetriveOrAnswer] POST - No query update, keeping original: '{original_query[:50]}...'")
 
             # Initialize retrieve attempts counter for RAG pipeline
             shared["retrieve_attempts"] = 0
-            logger.info("[MainDecision] POST - Complex question, routing to retrieve_kb (attempts=0)")
+            logger.info("[DecideToRetriveOrAnswer] POST - Complex question, routing to retrieve_kb (attempts=0)")
             return "retrieve_kb"
         elif input_type == "api_overload" or input_type == "default":
-            logger.warning("[MainDecision] POST - API issue, routing to fallback")
+            logger.warning("[DecideToRetriveOrAnswer] POST - API issue, routing to fallback")
             return "fallback"
         else:
             # Fallback: if unknown type or no explanation, route to fallback
-            logger.warning(f"[MainDecision] POST - Unknown type '{input_type}', routing to fallback")
+            logger.warning(f"[DecideToRetriveOrAnswer] POST - Unknown type '{input_type}', routing to fallback")
             return "fallback"
