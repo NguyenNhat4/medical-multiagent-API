@@ -15,6 +15,7 @@ from .kb_oqa import (
     is_oqa_index_loaded,
 )
 
+from . import qdrant_retrieval
 __all__ = [
     "KnowledgeBaseIndex",
     "get_kb",
@@ -24,4 +25,5 @@ __all__ = [
     "ROLE_TO_CSV",
     "preload_oqa_index",
     "is_oqa_index_loaded",
+    "qdrant_retrieval"
 ]

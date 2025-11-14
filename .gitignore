@@ -85,3 +85,7 @@ coverage/
 .node_repl_history 
 
 venv/
+
+models--qdrant--paraphrase-multilingual-MiniLM-L12-v2-onnx-Q/
+qdrant_storage/
+models/

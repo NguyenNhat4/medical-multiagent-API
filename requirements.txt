@@ -18,3 +18,5 @@ bcrypt==3.2.2
 python-jose[cryptography]==3.3.0
 rank_bm25==0.2.2
 ujson==5.10.0
+qdrant-client
+fastembed
