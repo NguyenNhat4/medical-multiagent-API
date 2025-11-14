@@ -48,9 +48,8 @@ Lịch sử hội thoại gần đây:
 
         # Prompt: decide type AND generate response
         prompt = f"""Bạn là bot trợ lý y tế, chỉ trao đổi quanh chủ đề y tế.
-
 {history_context}
-user input: "{query}"
+current user input: "{query}"
 
 Chọn 1 trong 2 Hành động:
 - direct_response: trao đổi xuồng sả, hỏi để biết người dùng cần hỗ trợ gì về y tế
@@ -58,22 +57,26 @@ Chọn 1 trong 2 Hành động:
 Lưu ý:
 - Hãy dựa vào ngữ cảnh hội thoại để hiểu câu hỏi và quyết định phù hợp
 - trong cơ sở tri thức chỉ dùng một term chung là "Đái Tháo Đường".
+- type , context_summary, explanation (str), hãy chắn chắn yaml indent đúng để load đúng.
 
 
-Trả về YAML:
 Nếu chọn direct_response:
 ```yaml
 type: direct_response
 context_summary: "<để trống>"
-explanation: "Câu trả lời của bạn ở đây"
+explanation: "Câu trả lời của bạn 
+    gửi tới user ở đây"
 ```
 
 Nếu chọn retrieve_kb:
 ```yaml
 type: retrieve_kb
-context_summary: "<tóm tắt bối cảnh để agent khác hiểu tối đa 2 câu. >"
-explanation: "<phải để trống>"
+context_summary: |
+    <sẽ mô tả ngắn gọn lại ngữ cảnh hội thoại đang diễn ra  và input hiện tại của họ.>
+explanation: <phải để trống>
 ```
+
+Trả về YAML như yêu cầu:
 """
         logger.info(f"[DecideToRetriveOrAnswer] prompt: {prompt}")
 
