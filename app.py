@@ -132,13 +132,14 @@ async def root():
 
 
 # Include routers
-from api import auth_router, users_router, health_router, chat_router, threads_router
+from api import auth_router, users_router, health_router, chat_router, threads_router, embeddings_router
 
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(health_router)
 app.include_router(chat_router)
 app.include_router(threads_router)
+app.include_router(embeddings_router)
 
 
 if __name__ == "__main__":

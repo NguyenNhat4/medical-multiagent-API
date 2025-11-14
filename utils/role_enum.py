@@ -9,6 +9,14 @@ class RoleEnum(str, Enum):
     DOCTOR_ENDOCRINE = "doctor_endocrine"
     ORTHODONTIST = "orthodontist"
 
+ROLE_TO_CSV = {
+    RoleEnum.PATIENT_DIABETES.value: "bndtd.csv",
+    RoleEnum.DOCTOR_ENDOCRINE.value: "bsnt.csv", 
+    RoleEnum.PATIENT_DENTAL.value: "bnrhm.csv",
+    RoleEnum.DOCTOR_DENTAL.value: "bsrhm.csv",
+}
+
+
 
 ROLE_DISPLAY_NAME: Dict[RoleEnum, str] = {
     RoleEnum.PATIENT_DENTAL: "Bệnh nhân nha khoa",

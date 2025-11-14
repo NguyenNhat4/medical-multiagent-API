@@ -20,7 +20,7 @@ from contextlib import contextmanager
 from datetime import datetime
 import threading
 
-from core.flows import create_med_agent_flow, create_oqa_orthodontist_flow
+from core.flows import create_med_agent_flow
 
 # Configure logger
 logger = logging.getLogger(__name__)
@@ -49,7 +49,7 @@ def get_oqa_flow():
     global _oqa_flow
     if _oqa_flow is None:
         try:
-            _oqa_flow = create_oqa_orthodontist_flow()
+            # _oqa_flow = create_oqa_orthodontist_flow()
             logger.info("✅ OQA orthodontist flow created successfully")
         except Exception as e:
             logger.error(f"❌ Failed to create OQA flow: {str(e)}")

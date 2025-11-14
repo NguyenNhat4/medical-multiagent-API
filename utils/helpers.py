@@ -47,9 +47,10 @@ def format_kb_qa_list(hits: List[Dict[str, Any]], max_items: int = 10, include_e
     lines: List[str] = []
     added = 0
     for item in hits:
-        answer = str(item.get("cau_tra_loi", "")).strip()
-        question = str(item.get("cau_hoi", "")).strip()
-        explanation = str(item.get("giai_thich", "")).strip()
+        # Support both UPPERCASE (from Qdrant) and lowercase (legacy)
+        answer = str(item.get("CAUTRALOI") or item.get("cau_tra_loi", "")).strip()
+        question = str(item.get("CAUHOI") or item.get("cau_hoi", "")).strip()
+        explanation = str(item.get("GIAITHICH") or item.get("giai_thich", "")).strip()
 
         if not answer:
             continue
