@@ -77,6 +77,7 @@ new_query: "< Viết lại user input cho rõ ràng, chỉ khi nó mơ hồ.>"
 """
 
         try:
+            logger.log(f"[DecideToRetriveOrAnswer] prompt: {prompt}")
             resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
 
             result = parse_yaml_with_schema(
