@@ -76,7 +76,10 @@ def get_chu_de_con_for_demuc(role: str, demuc: str) -> List[str]:
     """
     try:
         from utils.role_enum import ROLE_TO_CSV
-
+        if role not in ROLE_TO_CSV:
+            raise ValueError(
+                f"Role '{role}' không hợp lệ. Hợp lệ: {list(ROLE_TO_CSV.keys())}"
+            )
         # Get CSV file for this role
         csv_file = ROLE_TO_CSV.get(role)
 
@@ -92,7 +95,7 @@ def get_chu_de_con_for_demuc(role: str, demuc: str) -> List[str]:
 
         # Filter for specific DEMUC and get unique CHU_DE_CON list
         filtered_df = df[df["DEMUC"] == demuc]
-        chu_de_con_list = sorted(filtered_df["CHUDECON"].unique().tolist())
+        chu_de_con_list = sorted(filtered_df["CHUDECON"].dropna().unique().tolist())
 
         logger.info(f"Loaded {len(chu_de_con_list)} CHU_DE_CON for DEMUC '{demuc}' from {csv_file}")
         return chu_de_con_list

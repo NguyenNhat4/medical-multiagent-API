@@ -35,7 +35,7 @@ def create_retrieve_flow(fallback_node):
     logger.info("[retrieve_flow] Creating retrieval sub-flow")
 
     # Create retrieval pipeline nodes
-    topic_classify = TopicClassifyAgent()
+    topic_classify = TopicClassifyAgent(max_retries=3,wait=2)
     retrieve_kb = RetrieveFromKB()
     filter_agent = FilterAgent()
 

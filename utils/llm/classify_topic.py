@@ -9,7 +9,7 @@ According to PocketFlow best practices, these should be independent and easily t
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any , List
 from utils.llm import call_llm
 from utils.parsing import parse_yaml_with_schema
 from utils.auth import APIOverloadException
@@ -102,7 +102,7 @@ reason: "Lý do"
 def classify_chu_de_con_with_llm(
     query: str,
     demuc: str,
-    chu_de_con_list_str: str
+    chu_de_con_list_str: List[str]
 ) -> Dict[str, Any]:
     """
     Step 2: Call LLM to classify CHU_DE_CON (subtopic) within a DEMUC.
@@ -124,46 +124,27 @@ Bạn là trợ lý y khoa. Đã xác định được DEMUC="{demuc}".
 Câu hỏi của người dùng: "{query}"
 DEMUC hiện tại: "{demuc}"
 
-Danh sách CHU_DE_CON (chủ đề con) có sẵn trong DEMUC "{demuc}":
+List CHU_DE_CON (chủ đề con) có sẵn trong DEMUC hiện tại:
 {chu_de_con_list_str}
 
-NHIỆM VỤ: Chọn CHU_DE_CON phù hợp nhất từ danh sách trên.
-
-YÊU CẦU:
-- chu_de_con: chọn CHÍNH XÁC một CHU_DE_CON từ danh sách (viết đúng y hệt)
-- confidence: high/medium/low
-- reason: lý do ngắn gọn
-
-VÍ DỤ:
-Input: "Triệu chứng của đái tháo đường là gì?"
-DEMUC: "BỆNH LÝ ĐTĐ"
-Danh sách: ["Định nghĩa và phân loại", "Triệu chứng", "Chẩn đoán"]
-Output:
-```yaml
-chu_de_con: "Triệu chứng"
-confidence: "high"
-reason: "Câu hỏi rõ ràng về triệu chứng"
-```
-
-Trả về CHỈ một code block YAML hợp lệ:
-
-```yaml
-chu_de_con: "TÊN CHỦ ĐỀ CON"
-confidence: "high"
-reason: "Lý do"
+trả về câu trả lời của bạn với đúng chính xác format sau:
+```yaml 
+chu_de_con: <Chọn CHÍNH XÁC một CHU_DE_CON từ list chủ đề con,viết đúng y hệt>
+chu_de_con_confidence: <high|medium|low>
+chu_de_con_reason: <viết một lý do ngắn gọn tại sao bạn chọn chủ đề con này >
 ```
 """
 
         logger.info(f"[classify_chu_de_con_with_llm] Calling LLM to classify CHU_DE_CON for DEMUC='{demuc}'")
 
-        resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
+        resp = call_llm(prompt, fast_mode=True, max_retry_time=1)
         logger.info(f"[classify_chu_de_con_with_llm] LLM response received")
 
         result = parse_yaml_with_schema(
             resp,
             required_fields=["chu_de_con"],
-            optional_fields=["confidence", "reason"],
-            field_types={"chu_de_con": str, "confidence": str, "reason": str}
+            optional_fields=["chu_de_con_confidence", "reason"],
+            field_types={"chu_de_con": str, "chu_de_con_confidence": str, "chu_de_con_reason": str}
         )
 
         if result:
@@ -171,14 +152,14 @@ reason: "Lý do"
             return result
         else:
             logger.warning("[classify_chu_de_con_with_llm] Failed to parse LLM response")
-            return {"chu_de_con": "", "confidence": "low"}
+            return {"chu_de_con": "", "chu_de_con_confidence": "low"}
 
     except APIOverloadException as e:
         logger.warning(f"[classify_chu_de_con_with_llm] API overloaded: {e}")
-        return {"chu_de_con": "", "confidence": "low", "api_overload": True}
+        return {"chu_de_con": "", "chu_de_con_confidence": "low", "api_overload": True}
     except Exception as e:
         logger.warning(f"[classify_chu_de_con_with_llm] Classification failed: {e}")
-        return {"chu_de_con": "", "confidence": "low"}
+        return {"chu_de_con": "", "chu_de_con_confidence": "low"}
 
 
 if __name__ == "__main__":

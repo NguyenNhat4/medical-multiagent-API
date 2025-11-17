@@ -20,16 +20,24 @@ else:
 
 class TopicClassifyAgent(Node):
     """
-    Agent phân loại chủ đề chính (DEMUC only).
+    Agent phân loại chủ đề:
+      - DEMUC (bắt buộc, nếu chưa có)
+      - CHU_DE_CON (chỉ làm khi DEMUC đã có)
 
-    Refactored to follow PocketFlow best practices:
-    - prep(): Read from shared store ONLY (no DB/API calls)
-    - exec(): Call utility functions to classify DEMUC based on role's CSV file
-    - post(): Write to shared store ONLY
+    Quy ước PocketFlow:
+      - prep(): chỉ đọc từ shared
+      - exec(): gọi util/LLM để phân loại
+      - post(): chỉ ghi vào shared
 
-    Classification:
-    - Classify DEMUC from query based on role
-    - CHU_DE_CON is always left empty (not classified)
+    Luồng:
+      A) Nếu chưa có demuc:
+         - Lấy danh sách DEMUC theo role
+         - Gọi classify_demuc_with_llm
+         - Trả về demuc, chu_de_con=""
+      B) Nếu đã có demuc nhưng chưa có chu_de_con:
+         - Lấy danh sách CHU_DE_CON theo (role, demuc)
+         - Gọi classify_chu_de_con_with_llm
+         - Trả về demuc giữ nguyên, chu_de_con đã phân loại
     """
 
     def prep(self, shared):
@@ -49,40 +57,47 @@ class TopicClassifyAgent(Node):
             get_demuc_list_for_role,
             format_demuc_list_for_prompt
         )
-        from utils.llm.classify_topic import classify_demuc_with_llm
+        if not current_demuc:
+            from utils.llm.classify_topic import classify_demuc_with_llm
+            
+            # Only classify DEMUC (no CHU_DE_CON classification)
+            
+            # Get DEMUC list for role
+            demuc_list = get_demuc_list_for_role(role)
+            if not demuc_list:
+                logger.warning(f"🏷️ [TopicClassifyAgent] EXEC - No DEMUC list found for role '{role}'")
+                return {"demuc": "", "chu_de_con": "", "confidence": "low"}
 
-        # Only classify DEMUC (no CHU_DE_CON classification)
+            demuc_list_str = format_demuc_list_for_prompt(demuc_list)
+            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available DEMUCs: {demuc_list}")
 
-        # Get DEMUC list for role
-        demuc_list = get_demuc_list_for_role(role)
-        if not demuc_list:
-            logger.warning(f"🏷️ [TopicClassifyAgent] EXEC - No DEMUC list found for role '{role}'")
-            return {"demuc": "", "chu_de_con": "", "confidence": "low"}
+            # Classify DEMUC
+            demuc_result = classify_demuc_with_llm(
+                query=query,
+                role=role,
+                demuc_list_str=demuc_list_str
+            )
 
-        demuc_list_str = format_demuc_list_for_prompt(demuc_list)
-        logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available DEMUCs: {demuc_list}")
+            if demuc_result.get("api_overload"):
+                return {"demuc": "", "chu_de_con": "", "confidence": "low", "api_overload": True}
+            
+            current_demuc = demuc_result.get("demuc", "")
+            assert current_demuc != "", "DEMUC is not classified" 
+            
+            logger.info(f'🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC="{demuc_result.get("demuc", "")}", confidence="{demuc_result.get("confidence", "low")}", reason="{demuc_result.get("reason", "")}" ')
 
-        # Classify DEMUC
-        demuc_result = classify_demuc_with_llm(
-            query=query,
-            role=role,
-            demuc_list_str=demuc_list_str
-        )
-
-        if demuc_result.get("api_overload"):
-            return {"demuc": "", "chu_de_con": "", "confidence": "low", "api_overload": True}
-
-        classified_demuc = demuc_result.get("demuc", "")
-        logger.info(f'🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC="{classified_demuc}", confidence="{demuc_result.get("confidence", "low")}", reason="{demuc_result.get("reason", "")}" ')
-
-        # Return with DEMUC only (no CHU_DE_CON)
+        if not current_chu_de_con:          
+            from utils.llm.classify_topic import   classify_chu_de_con_with_llm
+            chu_de_con_result = classify_chu_de_con_with_llm()
+            current_chu_de_con = chu_de_con_result.get("chu_de_con","")
+           
         return {
-            "demuc": classified_demuc,
-            "chu_de_con": "",  # Always empty - we don't classify CHU_DE_CON
+            "demuc": current_demuc,
+            "chu_de_con": current_chu_de_con, 
             "confidence": demuc_result.get("confidence", "low"),
             "reason": demuc_result.get("reason", "")
-        }
-
+        }     
+     
     def post(self, shared, prep_res, exec_res):
 
         # Update shared with classification results - WRITE ONLY
