@@ -22,7 +22,8 @@ pip install -r requirements.txt
 
 # Start local Qdrant (if not running)
 docker run -d -p 6333:6333 -p 6334:6334 qdrant/qdrant
-
+# run this notebook to convert data to vector and ingrest to qdrant vector db
+qdrant.ipynb
 
 # Start API server
 python start_api.py
