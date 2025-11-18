@@ -44,14 +44,14 @@ class RetrieveFromKB(Node):
 
     def prep(self, shared):
         # Read from shared store ONLY
-        query = shared.get("query", "")
+        query = shared.get("retrieve_query", "query")
         demuc = shared.get("demuc", "")
         chu_de_con = shared.get("chu_de_con", "")
         role = shared.get("role", RoleEnum.PATIENT_DENTAL.value)
         return query, demuc, chu_de_con, role
 
     def exec(self, inputs):
-        query, demuc, chu_de_con, role = inputs
+        retrieve_query, demuc, chu_de_con, role = inputs
         # Call Qdrant retrieval utility function
         from utils.knowledge_base.qdrant_retrieval import retrieve_from_qdrant
 
@@ -61,14 +61,31 @@ class RetrieveFromKB(Node):
         logger.info(f"📚 [RetrieveFromKB] Role: {role} -> Collection: {collection_name}")
 
         # Retrieve with filters if available
-        retrieved_results = retrieve_from_qdrant(
-            query=query,
+        retrieved_results_no_chu_de_con = retrieve_from_qdrant(
+            query=retrieve_query,
             demuc=demuc if demuc else None,
-            chu_de_con=chu_de_con if chu_de_con else None,
+            chu_de_con=None,
             top_k=20,
             collection_name=collection_name
         )
-
+        retrieved_results_with_chu_de_con = []
+        if demuc:
+            retrieved_results_with_chu_de_con = retrieve_from_qdrant(
+            query=retrieve_query,
+            demuc=demuc ,
+            chu_de_con=chu_de_con,
+            top_k=5,
+            collection_name=collection_name
+            )
+          
+        retrieved_results = retrieved_results_no_chu_de_con + retrieved_results_with_chu_de_con
+        
+        # Filter out duplicate
+        seen_ids = set()
+        retrieved_results = [
+            e for e in retrieved_results 
+            if e["id"] not in seen_ids and not seen_ids.add(e["id"])                 
+        ]
         # Extract lightweight candidates: {id, CAUHOI}
         candidates = [
             {
