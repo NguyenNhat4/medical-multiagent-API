@@ -15,7 +15,8 @@ from .FallbackNode import FallbackNode
 from .FilterAgent import FilterAgent
 from .RagAgent import RagAgent
 from .QueryExpandAgent import QueryExpandAgent
-from .TopicClassifyAgent import TopicClassifyAgent 
+from .TopicClassifyAgent import TopicClassifyAgent
+from .QueryCreatingForRetrievalAgent import QueryCreatingForRetrievalAgent 
 
 
 
@@ -43,6 +44,7 @@ __all__ = [
     "RagAgent",
     "QueryExpandAgent",
     "TopicClassifyAgent",
+    "QueryCreatingForRetrievalAgent",
     # "GreetingResponse",  # add when implemented
     # OQA nodes
     # "OQAIngestDefaults",
