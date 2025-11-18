@@ -87,7 +87,7 @@ def setup_vietnam_logging(logger_name: str = None,
     """
     logger = logging.getLogger(logger_name)
     logger.setLevel(level)
-    
+    logger.propagate = False 
     # Remove existing handlers to avoid duplicates
     for handler in logger.handlers[:]:
         logger.removeHandler(handler)

@@ -90,10 +90,12 @@ class TopicClassifyAgent(Node):
 
         if not current_chu_de_con:          
             chu_de_con_list_str = get_chu_de_con_for_demuc(role=role,demuc=current_demuc)
+            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available chu_de_cons: {chu_de_con_list_str}")
             
             chu_de_con_result = classify_chu_de_con_with_llm(query = query, demuc =current_demuc,chu_de_con_list_str=chu_de_con_list_str)
             current_chu_de_con = chu_de_con_result.get("chu_de_con","")
-           
+            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classification chu_de_cons: {current_chu_de_con}")
+
         return {
             "demuc": current_demuc,
             "chu_de_con": current_chu_de_con, 

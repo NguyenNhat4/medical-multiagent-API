@@ -21,6 +21,9 @@ class ChatConfig:
     # Default messages
     DEFAULT_WELCOME_MESSAGE: str = "Xin chào 😊! Tôi là trợ lý AI của bạn. Rất vui được hỗ trợ bạn - Bạn cần tôi giúp gì hôm nay?"
 
+    # Knowledge base settings
+    MAX_KB_ITEMS: int = 6  # Maximum number of KB items to include in compose prompt
+
     @classmethod
     def get_welcome_message(cls) -> str:
         """Get welcome message from environment or use default"""

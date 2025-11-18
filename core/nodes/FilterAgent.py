@@ -60,13 +60,15 @@ class FilterAgent(Node):
 
         # Format candidates for LLM
         candidate_list_str = self._format_candidates(candidates)
-        
-        prompt = f"""Chọn tối đa 5 câu hỏi liên quan nhất để trả lời user.
+        logger.info(f"🔍 [FilterAgent] EXEC danh sách câu hỏi : {candidate_list_str}")
+        prompt = f"""
+        Bạn là trợ lý y khoa 
 Query hiện tại của user: {query}
 user role: {vietnamese_user_role}
 
-Candidates:
+danh sách câu hỏi được retrieve:
 {candidate_list_str}
+Chọn tối đa 10 câu hỏi liên quan nhất tới câu hỏi của user. ( câu trả lời sẽ được retrieve sau đó)
 
 YAML:
 ```yaml
@@ -84,13 +86,14 @@ selected_ids: [...]
 
             if result and result["selected_ids"]:
                 # Cap at 6
-                selected_ids = result["selected_ids"][:6]
-                logger.info(f"🔍 [FilterAgent] EXEC - Selected {len(selected_ids)} IDs")
-                return selected_ids
+                selected_ids = result["selected_ids"]
+                selected_questions = [e.get('CAUHOI') for e in candidates if e.get('id') in selected_ids]
+                logger.info(f"🔍 [FilterAgent] EXEC - Selected {selected_questions} ")
+                return selected_ids,selected_questions
             else:
                 # Fallback: top 6
                 logger.warning("🔍 [FilterAgent] EXEC - LLM parsing failed, using top 6")
-                return [c["id"] for c in candidates[:6]]
+                return [c["id"] for c in candidates[:6]], [e.get('CAUHOI') for e in candidates[:6]]
 
         except (APIOverloadException, Exception) as e:
             logger.warning(f"🔍 [FilterAgent] EXEC - Error: {e}, using top 6")
@@ -105,11 +108,10 @@ selected_ids: [...]
         return "\n".join(lines)
 
     def post(self, shared, prep_res, exec_res):
-        # exec_res is just a list of IDs
-        selected_ids = exec_res if isinstance(exec_res, list) else []
-
-        # Save to shared store
+        selected_ids,selected_questions= exec_res 
+        
         shared["selected_ids"] = selected_ids
+        shared["selected_questions"] = selected_questions
         shared["rag_state"] = "filtered"
 
         logger.info(f"🔍 [FilterAgent] POST - Saved {len(selected_ids)} IDs")

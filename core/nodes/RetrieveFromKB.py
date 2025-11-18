@@ -94,6 +94,10 @@ class RetrieveFromKB(Node):
             }
             for result in retrieved_results
         ]
+        questions = [q["CAUHOI"] for q in candidates ]
+        logger.info(f"📚 [RetrieveFromKB] Query used to retrieve:{retrieve_query}")
+        logger.info(f"📚 [RetrieveFromKB] Retrieve questions list {questions}")
+        
 
         return candidates
 
