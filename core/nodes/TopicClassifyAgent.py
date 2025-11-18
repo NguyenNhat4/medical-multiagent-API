@@ -48,17 +48,23 @@ class TopicClassifyAgent(Node):
         role = shared.get("role", "")
         current_demuc = shared.get("demuc", "")
         current_chu_de_con = shared.get("chu_de_con", "")
-
-        return query, role, current_demuc, current_chu_de_con
+        rag_state = shared.get("rag_state", "")
+        if rag_state == "create_retrieval_query_reason":
+            current_chu_de_con = ""
+            current_demuc = ""
+            
+            
+        return query, role, current_demuc, current_chu_de_con,rag_state
 
     def exec(self, inputs):
-        query, role, current_demuc, current_chu_de_con = inputs
+        query, role, current_demuc, current_chu_de_con,rag_state = inputs
         demuc_result = {"confidence": "", "reason": ""}
         from utils.knowledge_base.metadata_utils import (
             get_demuc_list_for_role,
             get_chu_de_con_for_demuc,
             format_demuc_list_for_prompt
         )
+        
         if not current_demuc:
             from utils.llm.classify_topic import classify_demuc_with_llm,classify_chu_de_con_with_llm
             
@@ -88,14 +94,14 @@ class TopicClassifyAgent(Node):
             
             logger.info(f'🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC="{demuc_result.get("demuc", "")}", confidence="{demuc_result.get("confidence", "low")}", reason="{demuc_result.get("reason", "")}" ')
 
-        if not current_chu_de_con:          
+        if not current_chu_de_con and rag_state != "create_retrieval_query_reason":          
             chu_de_con_list_str = get_chu_de_con_for_demuc(role=role,demuc=current_demuc)
             logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available chu_de_cons: {chu_de_con_list_str}")
             
             chu_de_con_result = classify_chu_de_con_with_llm(query = query, demuc =current_demuc,chu_de_con_list_str=chu_de_con_list_str)
             current_chu_de_con = chu_de_con_result.get("chu_de_con","")
             logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classification chu_de_cons: {current_chu_de_con}")
-
+     
         return {
             "demuc": current_demuc,
             "chu_de_con": current_chu_de_con, 
