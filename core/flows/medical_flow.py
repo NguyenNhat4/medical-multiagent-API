@@ -80,7 +80,7 @@ def create_med_agent_flow():
     # Note: "direct_response" action has NO connection → flow ends, answer already in shared
 
     rag_agent - "create_retrieval_query" >> better_retrieval_query  
-    better_retrieval_query >> rag_agent
+    better_retrieval_query >> retrieve_flow
     rag_agent - "retrieve_kb" >> retrieve_flow  # Loop back for more retrieval
     retrieve_flow >> rag_agent
     
