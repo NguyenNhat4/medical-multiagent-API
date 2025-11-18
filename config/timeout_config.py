@@ -15,7 +15,7 @@ class TimeoutConfig:
     FLOW_EXECUTION_TIMEOUT: int = int(os.getenv("FLOW_EXECUTION_TIMEOUT", "85"))
 
     # LLM retry timeout - max time for a single LLM call with all retries
-    LLM_RETRY_TIMEOUT: int = int(os.getenv("LLM_RETRY_TIMEOUT", "30"))
+    LLM_RETRY_TIMEOUT: int = int(os.getenv("LLM_RETRY_TIMEOUT", "1"))
 
     # Jitter range for retry cooldown to prevent thundering herd
     RETRY_JITTER_MIN_SECONDS: float = 0.0
