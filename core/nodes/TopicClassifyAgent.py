@@ -55,10 +55,11 @@ class TopicClassifyAgent(Node):
 
         from utils.knowledge_base.metadata_utils import (
             get_demuc_list_for_role,
+            get_chu_de_con_for_demuc,
             format_demuc_list_for_prompt
         )
         if not current_demuc:
-            from utils.llm.classify_topic import classify_demuc_with_llm
+            from utils.llm.classify_topic import classify_demuc_with_llm,classify_chu_de_con_with_llm
             
             # Only classify DEMUC (no CHU_DE_CON classification)
             
@@ -87,8 +88,9 @@ class TopicClassifyAgent(Node):
             logger.info(f'🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC="{demuc_result.get("demuc", "")}", confidence="{demuc_result.get("confidence", "low")}", reason="{demuc_result.get("reason", "")}" ')
 
         if not current_chu_de_con:          
-            from utils.llm.classify_topic import   classify_chu_de_con_with_llm
-            chu_de_con_result = classify_chu_de_con_with_llm()
+            chu_de_con_list_str = get_chu_de_con_for_demuc(role=role,demuc=current_demuc)
+            
+            chu_de_con_result = classify_chu_de_con_with_llm(query = query, demuc =current_demuc,chu_de_con_list_str=chu_de_con_list_str)
             current_chu_de_con = chu_de_con_result.get("chu_de_con","")
            
         return {
