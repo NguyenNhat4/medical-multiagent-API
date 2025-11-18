@@ -53,7 +53,7 @@ class TopicClassifyAgent(Node):
 
     def exec(self, inputs):
         query, role, current_demuc, current_chu_de_con = inputs
-
+        demuc_result = {"confidence": "", "reason": ""}
         from utils.knowledge_base.metadata_utils import (
             get_demuc_list_for_role,
             get_chu_de_con_for_demuc,

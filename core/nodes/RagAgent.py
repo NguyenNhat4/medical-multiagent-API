@@ -53,6 +53,7 @@ class RagAgent(Node):
         prompt = f"""Bạn là Orchestrator RAG Agent đưa ra quyết định dựa vào thông tin sau.
 User query: "{query}"
 Retrieve attempts: {retrieve_attempts}/{self.max_retries}
+Trạng thái tại hiện tại:{rag_state}
 Danh sách câu hỏi đã retrieve: 
 {selected_questions}
 {conversation_context}
@@ -115,7 +116,7 @@ Trả về chính xác câu trúc yml trên:
             return "compose_answer"
         elif next_action == "create_retrieval_query":
             shared['create_retrieval_query_reason'] = reason
-            
+            shared["rag_state"] = "just created new query"
             return "create_retrieval_query"
         else:
             logger.warning(f"  [RagAgent] POST - Unknown action '{next_action}', defaulting to compose_answer")
