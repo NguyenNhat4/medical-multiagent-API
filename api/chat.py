@@ -159,8 +159,8 @@ async def chat(
                 detail="Thread not found or you don't have permission to access it"
             )
 
-        # Get recent messages (last 6 messages - 3 pairs)
-        recent_messages = sorted(thread.messages, key=lambda m: m.timestamp, reverse=True)[:6][::-1]
+ 
+        recent_messages = sorted(thread.messages, key=lambda m: m.timestamp, reverse=True)[:8][::-1]
 
         # Validate and normalize role
         role_name = request.role
