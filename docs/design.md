@@ -206,13 +206,14 @@ shared = {
    - *Actions*: "default" → retrieve_flow, "fallback" → FallbackNode
 
 5. **TopicClassifyAgent Node** (within retrieve_flow)
-   - *Purpose*: Hierarchical topic classification - classify DEMUC and CHU_DE_CON sequentially
+   - *Purpose*: Hierarchical topic classification - classify DEMUC and CHU_DE_CON sequentially with smart reset logic
    - *Type*: Regular Node with max_retries=3, wait=2
    - *Steps*:
-     - *prep*: Read "retrieval_query" or "query", "role", "demuc", "chu_de_con" from shared store
-     - *exec*: If no demuc: call classify_demuc_with_llm; then call classify_chu_de_con_with_llm
+     - *prep*: Read "retrieval_query" or "query", "role", "demuc", "chu_de_con", "rag_state" from shared store; Reset demuc/chu_de_con if rag_state == "create_retrieval_query_reason"
+     - *exec*: If no demuc: get DEMUC list for role → call classify_demuc_with_llm; If no chu_de_con AND rag_state != "create_retrieval_query_reason": get CHU_DE_CON list → call classify_chu_de_con_with_llm
      - *post*: Write "demuc", "chu_de_con", "classification_confidence" to shared store
    - *Actions*: "default" → RetrieveFromKB, "fallback" → FallbackNode
+   - *Note*: Smart reset prevents using stale topic metadata after query optimization
 
 6. **RetrieveFromKB Node** (within retrieve_flow)
    - *Purpose*: Fetch relevant QA candidates from Qdrant vector database with metadata filtering
