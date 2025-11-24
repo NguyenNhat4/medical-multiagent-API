@@ -46,12 +46,12 @@ class RetrieveFromKB(Node):
         # Read from shared store ONLY
         query = shared.get("retrieval_query") or shared.get("query")
         demuc = shared.get("demuc", "")
-        chu_de_con = shared.get("chu_de_con", "")
+        # chu_de_con = shared.get("chu_de_con", "") # Not used anymore
         role = shared.get("role", RoleEnum.PATIENT_DENTAL.value)
-        return query, demuc, chu_de_con, role
+        return query, demuc, role
 
     def exec(self, inputs):
-        retrieve_query, demuc, chu_de_con, role = inputs
+        retrieve_query, demuc, role = inputs
         # Call Qdrant retrieval utility function
         from utils.knowledge_base.qdrant_retrieval import retrieve_from_qdrant
 
@@ -60,45 +60,62 @@ class RetrieveFromKB(Node):
 
         logger.info(f"📚 [RetrieveFromKB] Role: {role} -> Collection: {collection_name}")
 
-        # Retrieve with filters if available
-        retrieved_results_no_chu_de_con = retrieve_from_qdrant(
+        # Strategy:
+        # 1. Search WITHOUT filters (global context)
+        # 2. Search WITH demuc filter (narrow context) - if demuc exists
+        # 3. Combine and deduplicate
+
+        # 1. Global search (no filters)
+        retrieved_results_global = retrieve_from_qdrant(
             query=retrieve_query,
-            demuc=demuc if demuc else None,
+            demuc=None,
             chu_de_con=None,
             top_k=20,
             collection_name=collection_name
         )
-        retrieved_results_with_chu_de_con = []
+        
+        retrieved_results_filtered = []
         if demuc:
-            retrieved_results_with_chu_de_con = retrieve_from_qdrant(
-            query=retrieve_query,
-            demuc=demuc ,
-            chu_de_con=chu_de_con,
-            top_k=10,
-            collection_name=collection_name
+            # 2. Filtered search (only by demuc, ignore chu_de_con)
+            retrieved_results_filtered = retrieve_from_qdrant(
+                query=retrieve_query,
+                demuc=demuc,
+                chu_de_con=None, # Ignore sub-topic
+                top_k=20, # Slightly less than global
+                collection_name=collection_name
             )
           
-        retrieved_results = retrieved_results_no_chu_de_con + retrieved_results_with_chu_de_con
+        # Combine results: Filtered first (more relevant), then Global
+        retrieved_results = retrieved_results_filtered + retrieved_results_global
         
         # Filter out duplicate
         seen_ids = set()
-        retrieved_results = [
-            e for e in retrieved_results 
-            if e["id"] not in seen_ids and not seen_ids.add(e["id"])                 
-        ]
+        unique_results = []
+        for e in retrieved_results:
+            if e["id"] not in seen_ids:
+                seen_ids.add(e["id"])
+                unique_results.append(e)
+
+        # Sort by score descending
+        unique_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        
+        # Take top 10 highest score
+        top_results = unique_results[:10]
+
         # Extract lightweight candidates: {id, CAUHOI}
         candidates = [
             {
                 "id": result["id"],
-                "CAUHOI": result["CAUHOI"]
+                "CAUHOI": result["CAUHOI"],
+                "score": result.get("score", 0)
             }
-            for result in retrieved_results
+            for result in top_results
         ]
-        questions = [q["CAUHOI"] for q in candidates ]
-        logger.info(f"📚 [RetrieveFromKB] Query used to retrieve:{retrieve_query}")
-        logger.info(f"📚 [RetrieveFromKB] Retrieve questions list {questions}")
         
-
+        questions = [q["CAUHOI"] for q in candidates]
+        logger.info(f"📚 [RetrieveFromKB] Query used to retrieve: {retrieve_query}")
+        logger.info(f"📚 [RetrieveFromKB] Retrieved {len(candidates)} top candidates (sorted by score)")
+        
         return candidates
 
     def post(self, shared, prep_res, exec_res):
@@ -107,8 +124,13 @@ class RetrieveFromKB(Node):
 
         # Save lightweight candidates to shared store
         shared["retrieved_candidates"] = candidates
+        
+        # Direct pass-through (replacing FilterAgent logic):
+        # Save selected_ids and selected_questions directly from top candidates
+        shared["selected_ids"] = [c["id"] for c in candidates]
+        shared["selected_questions"] = [c["CAUHOI"] for c in candidates]
+        
         # Update RAG state
         shared["rag_state"] = "retrieved"
+        logger.info(f"📚 [RetrieveFromKB] POST - Saved {len(candidates)} candidates directly as selected")
         return "default" 
-
-
