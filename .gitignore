@@ -96,3 +96,5 @@ test.*
 .env
 .env.local
 .env.docker
+
+medical_knowledge_base/*
