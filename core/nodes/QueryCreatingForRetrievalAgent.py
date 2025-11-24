@@ -50,14 +50,15 @@ class QueryCreatingForRetrievalAgent(Node):
         # Build topic context if available
         topic_context = f"\nChủ đề đã xác định: DEMUC='{demuc}'" if demuc else ""
             
-        reason_final = f"\n- Lý do cần tạo là: {reason}" if reason else ""
+        reason_final = f"- Lý do cần tạo là: {reason}" if reason else ""
     
         
         prompt = f"""Bạn là hệ thống tạo câu hỏi để truy vấn  mục tiêu là  lọc ra các câu hỏi liên quan nhất từ bộ câu hỏi QA y khoa.
 
 BỐI CẢNH:
 -Tóm tắt hội thoại trước đó: {context_summary}
-- Câu hỏi hiện tại của người dùng: "{current_user_input}"{reason_final}
+- Câu hỏi hiện tại của người dùng: "{current_user_input}"
+{reason_final}
 - Người dùng là {vietnameseRole} 
         {topic_context}
 

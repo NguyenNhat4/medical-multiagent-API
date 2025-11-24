@@ -30,46 +30,50 @@ The medical agent flow serves as a multi-agent system for handling medical consu
 
 ### Flow High-level Design:
 
-1. **IngestQuery**: Standardizes input processing and role validation
-2. **DecideToRetriveOrAnswer**: Intelligent LLM-based classification (direct_response vs retrieve_kb)
-3. **Retrieve Sub-Flow**: Modular retrieval pipeline
-   - **TopicClassifyAgent**: Classifies query into DEMUC categories
-   - **RetrieveFromKB**: Fetches relevant documents from knowledge base
-   - **FilterAgent**: Filters and ranks retrieved candidates
-4. **RagAgent**: Analyzes filtered results and decides next action (compose_answer, retry_retrieve, fallback)
-5. **ComposeAnswer**: Generates comprehensive medical responses with structured output
-6. **FallbackNode**: Robust API overload handling with direct KB lookup
+1. **IngestQuery**: Standardizes input processing, formats conversation history
+2. **DecideToRetriveOrAnswer**: Intelligent LLM-based classification with context summarization (direct_response vs retrieve_kb)
+3. **RagAgent**: Orchestration agent that decides next action (create_retrieval_query, retrieve_kb, compose_answer)
+4. **QueryCreatingForRetrievalAgent**: Creates optimized retrieval query from conversation context
+5. **Retrieve Sub-Flow**: Modular retrieval pipeline
+   - **TopicClassifyAgent**: Classifies query into DEMUC and CHU_DE_CON categories
+   - **RetrieveFromKB**: Fetches relevant QA IDs from Qdrant vector database
+   - **FilterAgent**: Filters and selects most relevant QA IDs using LLM
+6. **ComposeAnswer**: Generates comprehensive medical responses with structured output
+7. **FallbackNode**: Robust API overload handling
 
 ```mermaid
 flowchart TD
     IngestQuery[IngestQuery<br/>📝 Input Processing]
-    MainDecision[DecideToRetriveOrAnswer<br/>🧠 Classification]
+    MainDecision[DecideToRetriveOrAnswer<br/>🧠 Classification & Context Summary]
+    RagAgent[RagAgent<br/>🎯 Orchestration Decision Agent]
+    QueryOptimizer[QueryCreatingForRetrievalAgent<br/>🔧 Query Optimization]
 
     subgraph RetrieveFlow[Retrieve Sub-Flow]
-        TopicClassify[TopicClassifyAgent<br/>🏷️ DEMUC Classification]
-        RetrieveKB[RetrieveFromKB<br/>📚 Knowledge Retrieval]
-        FilterAgent[FilterAgent<br/>🔍 Candidate Filtering]
+        TopicClassify[TopicClassifyAgent<br/>🏷️ DEMUC & CHU_DE_CON Classification]
+        RetrieveKB[RetrieveFromKB<br/>📚 Vector Search Qdrant]
+        FilterAgent[FilterAgent<br/>🔍 LLM-based Candidate Filtering]
 
         TopicClassify --> RetrieveKB
         RetrieveKB --> FilterAgent
     end
 
-    RagAgent[RagAgent<br/>  Decision Agent]
     ComposeAnswer[ComposeAnswer<br/>✍️ Response Generation]
     Fallback[FallbackNode<br/>🔄 Fallback Handling]
 
     IngestQuery --> MainDecision
     MainDecision -- "direct_response" --> END[Flow Ends]
-    MainDecision -- "retrieve_kb" --> RetrieveFlow
+    MainDecision -- "retrieve_kb" --> RagAgent
     MainDecision -- "fallback" --> Fallback
 
+    RagAgent -- "create_retrieval_query" --> QueryOptimizer
+    QueryOptimizer --> RetrieveFlow
+    RagAgent -- "retrieve_kb" --> RetrieveFlow
     RetrieveFlow --> RagAgent
-    RetrieveFlow -- "fallback" --> Fallback
-
     RagAgent -- "compose_answer" --> ComposeAnswer
-    RagAgent -- "retry_retrieve" --> RetrieveFlow
-    RagAgent -- "fallback" --> Fallback
 
+    RetrieveFlow -- "fallback" --> Fallback
+    RagAgent -- "fallback" --> Fallback
+    QueryOptimizer -- "fallback" --> Fallback
     ComposeAnswer -- "fallback" --> Fallback
 ```
 
@@ -79,24 +83,39 @@ flowchart TD
 > 1. Understand the utility function definition thoroughly by reviewing the doc.
 > 2. Include only the necessary utility functions, based on nodes in the flow.
 
-1. **Call LLM** (`utils/call_llm.py`)
-   - *Input*: prompt (str), optional fast_mode (bool)
+1. **Call LLM** (`utils/llm/call_llm.py`)
+   - *Input*: prompt (str), optional fast_mode (bool), max_retry_time (int)
    - *Output*: response (str)
-   - Used by DecideToRetriveOrAnswer, ComposeAnswer, and ChitChatRespond for LLM operations
+   - Used by most nodes (DecideToRetriveOrAnswer, RagAgent, TopicClassifyAgent, FilterAgent, QueryCreatingForRetrievalAgent, ComposeAnswer) for LLM operations
    - Handles APIOverloadException for graceful degradation
 
-2. **Knowledge Base Retrieval** (`utils/kb.py`)
-   - *Input*: query (str), role (str), top_k (int)
-   - *Output*: (results: List[Dict], best_score: float)
-   - Used by RetrieveFromKB and FallbackNode for semantic search
+2. **Qdrant Vector Retrieval** (`utils/knowledge_base/qdrant_retrieval.py`)
+   - Functions: `retrieve_from_qdrant`, `get_full_qa_by_ids`
+   - *Input*: query (str), demuc (str), chu_de_con (str), collection_name (str), top_k (int)
+   - *Output*: List[Dict] with {id, CAUHOI, score} or full QA pairs
+   - Used by RetrieveFromKB to fetch candidates from vector database and by ComposeAnswer to get full QA content
 
-3. **Response Parser** (`utils/response_parser.py`)
-   - *Input*: yaml_text (str), required_fields (List), field_types (Dict)
+3. **Topic Classification** (`utils/llm/classify_topic.py`)
+   - Functions: `classify_demuc_with_llm`, `classify_chu_de_con_with_llm`
+   - *Input*: query (str), role (str), demuc_list_str/chu_de_con_list_str (str)
+   - *Output*: Dict with {demuc/chu_de_con, confidence, reason}
+   - Used by TopicClassifyAgent for hierarchical topic classification
+
+4. **Metadata Utils** (`utils/knowledge_base/metadata_utils.py`)
+   - Functions: `get_demuc_list_for_role`, `get_chu_de_con_for_demuc`, `format_demuc_list_for_prompt`
+   - *Input*: role (str), demuc (str)
+   - *Output*: List of available DEMUC/CHU_DE_CON categories
+   - Used by TopicClassifyAgent to get valid classification options
+
+5. **Response Parser** (`utils/parsing/response_parser.py`)
+   - Function: `parse_yaml_with_schema`
+   - *Input*: yaml_text (str), required_fields (List), optional_fields (List), field_types (Dict)
    - *Output*: parsed_dict (Dict)
-   - Used by DecideToRetriveOrAnswer and ComposeAnswer for structured LLM output parsing
+   - Used by all LLM-calling nodes for structured YAML output parsing with validation
 
-4. **Format Helpers** (`utils/helpers.py`)
-   - *Input*: Various formatting inputs (QA lists, conversation history)
+6. **Format Helpers** (`utils/helpers.py`)
+   - Functions: `format_kb_qa_list`, `format_conversation_history`
+   - *Input*: QA list or conversation history
    - *Output*: Formatted strings for prompts
    - Used across multiple nodes for consistent data presentation
 
@@ -112,32 +131,37 @@ The shared store structure is organized as follows:
 shared = {
     # Input data
     "input": str,                    # Raw user input
-    "role": str,                     # User's medical role (e.g., patient_diabetes)
-    "conversation_history": List[Dict],  # Previous conversation context
-
-    # Processing data
-    "query": str,                    # Processed/cleaned query
-    "input_type": str,              # Classification result (medical_question, direct_response)
-    "direct_response": str,         # Direct answer for non-medical queries
-
-    # Topic classification
-    "topic_category": str,          # DEMUC category (Diabetes, Endocrine, etc.)
-    "classification_confidence": float,  # Topic classification confidence
-
-    # Retrieval data
-    "retrieved_candidates": List[Dict],  # Raw knowledge base results
-    "filtered_candidates": List[Dict],   # Filtered and ranked results
-    "retrieval_score": float,           # Best retrieval score
-    "top_k_candidates": int,            # Number of candidates to retrieve
-
-    # RAG decision
-    "rag_decision": str,            # Action: compose_answer, retry_retrieve, fallback
-    "rag_reason": str,             # Reasoning for RAG decision
-
+    "role": str,                     # User's medical role (e.g., patient_diabetes, patient_dental)
+    "conversation_history": List[Dict],  # Previous conversation context with {role, content}
+    
+    # Processed input data
+    "query": str,                    # Original processed query from user
+    "retrieval_query": str,          # Optimized query for retrieval (created by QueryCreatingForRetrievalAgent)
+    "original_query": str,           # Backup of original query before optimization
+    "formatted_conversation_history": str,  # Formatted conversation for prompt context
+    "context_summary": str,          # LLM-generated summary of conversation context
+    
+    # Topic classification (hierarchical)
+    "demuc": str,                    # Top-level category (e.g., "BỆNH LÝ ĐTĐ", "NHA KHOA")
+    "chu_de_con": str,               # Sub-category under DEMUC (e.g., "Định nghĩa và phân loại")
+    "classification_confidence": str, # Confidence level: high/medium/low
+    
+    # Retrieval pipeline data
+    "retrieved_candidates": List[Dict],  # Lightweight candidates with {id, CAUHOI} from vector DB
+    "selected_ids": List[str],       # IDs selected by FilterAgent (max 10)
+    "selected_questions": List[str], # Question texts for selected IDs
+    "rag_state": str,                # Current RAG state: init/retrieved/filtered/composing
+    "retrieve_attempts": int,        # Counter for retrieval attempts (max 2)
+    
+    # Query optimization metadata
+    "retrieval_query_confidence": str,  # Confidence of retrieval query: high/medium/low
+    "retrieval_query_reason": str,   # Explanation of how retrieval query was created
+    "create_retrieval_query_reason": str,  # Reason RagAgent decided to create new query
+    
     # Output data
-    "answer_obj": Dict,            # Complete response object with explain & suggestions
-    "explain": str,                # Main explanation text
-    "suggestion_questions": List[str], # Follow-up question suggestions
+    "answer_obj": Dict,              # Complete response object with all fields
+    "explain": str,                  # Main explanation text for user
+    "suggestion_questions": List[str], # Follow-up question suggestions (3 items)
 }
 ```
 
@@ -146,65 +170,83 @@ shared = {
 > Notes for AI: Carefully decide whether to use Batch/Async Node/Flow.
 
 1. **IngestQuery Node**
-   - *Purpose*: Standardize input processing and extract role/query information
+   - *Purpose*: Standardize input processing, format conversation history (last 6 messages)
    - *Type*: Regular Node
    - *Steps*:
-     - *prep*: Read "input" and "role" from shared store
-     - *exec*: Process and validate input data, create structured result
-     - *post*: Write "role" and "query" to shared store
+     - *prep*: Read "input", "role", and "conversation_history" from shared store
+     - *exec*: Process input, format conversation history into readable text
+     - *post*: Write "role", "query", and "formatted_conversation_history" to shared store
+   - *Actions*: "default" → MainDecision
 
-2. **DecideToRetriveOrAnswer Node**
-   - *Purpose*: Intelligent classification of user input using LLM
-   - *Type*: Regular Node with retry mechanism
+2. **DecideSummarizeConversationToRetriveOrDirectlyAnswer Node**
+   - *Purpose*: Classify input type and create conversation context summary using LLM
+   - *Type*: Regular Node with API overload handling
    - *Steps*:
-     - *prep*: Read "query", "role", and "conversation_history" from shared store
-     - *exec*: Call LLM for input classification (direct_response vs retrieve_kb)
-     - *post*: Write "input_type" and "direct_response" (if applicable), route accordingly
+     - *prep*: Read "query", "role", and "formatted_conversation_history" from shared store
+     - *exec*: Call LLM (fast_mode) to classify type (direct_response/retrieve_kb) and create context_summary
+     - *post*: If direct_response: write "answer_obj" and return "direct_response"; If retrieve_kb: write "context_summary" and return "retrieve_kb"; If API overload: return "fallback"
+   - *Actions*: "direct_response" → END, "retrieve_kb" → RagAgent, "fallback" → FallbackNode
 
-3. **TopicClassifyAgent Node** (within retrieve_flow)
-   - *Purpose*: Classify medical query into DEMUC categories
-   - *Type*: Regular Node with LLM
+3. **RagAgent Node** (Orchestration Agent)
+   - *Purpose*: Intelligent orchestration of RAG pipeline - decides whether to optimize query, retrieve, or compose answer
+   - *Type*: Regular Node with max_retries=2
    - *Steps*:
-     - *prep*: Read "query" from shared store
-     - *exec*: Call LLM to classify into Diabetes/Endocrine/Metabolism/Urology/Cardiovascular
-     - *post*: Write "topic_category" and "classification_confidence" to shared store
+     - *prep*: Read "retrieval_query" or "query", "rag_state", "retrieve_attempts", "selected_questions", "context_summary" from shared store
+     - *exec*: Call LLM (fast_mode) to decide next action based on current state and retrieved questions
+     - *post*: Update "retrieve_attempts" and "rag_state"; route to create_retrieval_query/retrieve_kb/compose_answer
+   - *Actions*: "create_retrieval_query" → QueryCreatingForRetrievalAgent, "retrieve_kb" → retrieve_flow, "compose_answer" → ComposeAnswer, "fallback" → FallbackNode
 
-4. **RetrieveFromKB Node** (within retrieve_flow)
-   - *Purpose*: Fetch relevant documents from knowledge base
+4. **QueryCreatingForRetrievalAgent Node**
+   - *Purpose*: Create optimized retrieval query from conversation context and user input
+   - *Type*: Regular Node with API overload handling
+   - *Steps*:
+     - *prep*: Read "retrieval_query" or "query", "role", "demuc", "chu_de_con", "context_summary", "create_retrieval_query_reason" from shared store
+     - *exec*: Call LLM (fast_mode) to generate optimized retrieval_query with reasoning
+     - *post*: Write "original_query", "retrieval_query", "retrieval_query_confidence", "retrieval_query_reason" to shared store
+   - *Actions*: "default" → retrieve_flow, "fallback" → FallbackNode
+
+5. **TopicClassifyAgent Node** (within retrieve_flow)
+   - *Purpose*: Hierarchical topic classification - classify DEMUC and CHU_DE_CON sequentially with smart reset logic
+   - *Type*: Regular Node with max_retries=3, wait=2
+   - *Steps*:
+     - *prep*: Read "retrieval_query" or "query", "role", "demuc", "chu_de_con", "rag_state" from shared store; Reset demuc/chu_de_con if rag_state == "create_retrieval_query_reason"
+     - *exec*: If no demuc: get DEMUC list for role → call classify_demuc_with_llm; If no chu_de_con AND rag_state != "create_retrieval_query_reason": get CHU_DE_CON list → call classify_chu_de_con_with_llm
+     - *post*: Write "demuc", "chu_de_con", "classification_confidence" to shared store
+   - *Actions*: "default" → RetrieveFromKB, "fallback" → FallbackNode
+   - *Note*: Smart reset prevents using stale topic metadata after query optimization
+
+6. **RetrieveFromKB Node** (within retrieve_flow)
+   - *Purpose*: Fetch relevant QA candidates from Qdrant vector database with metadata filtering
    - *Type*: Regular Node
    - *Steps*:
-     - *prep*: Read "query", "topic_category", and "top_k_candidates" from shared store
-     - *exec*: Query Qdrant vector DB with topic filtering
-     - *post*: Write "retrieved_candidates" and "retrieval_score" to shared store
+     - *prep*: Read "retrieval_query" or "query", "demuc", "chu_de_con", "role" from shared store
+     - *exec*: Call retrieve_from_qdrant twice (with and without chu_de_con filter), deduplicate by ID, return lightweight candidates {id, CAUHOI}
+     - *post*: Write "retrieved_candidates" and "rag_state"="retrieved" to shared store
+   - *Actions*: "default" → FilterAgent, "fallback" → FallbackNode
 
-5. **FilterAgent Node** (within retrieve_flow)
-   - *Purpose*: Filter and rank retrieved candidates using LLM
-   - *Type*: Regular Node with LLM
+7. **FilterAgent Node** (within retrieve_flow)
+   - *Purpose*: Use LLM to filter and select most relevant QA IDs (max 10)
+   - *Type*: Regular Node with API overload handling
    - *Steps*:
-     - *prep*: Read "query" and "retrieved_candidates" from shared store
-     - *exec*: Use LLM to assess relevance and rank candidates
-     - *post*: Write "filtered_candidates" to shared store
+     - *prep*: Read "retrieval_query" or "query", "retrieved_candidates", "role" from shared store
+     - *exec*: If ≤3 candidates: return all; else call LLM (fast_mode) to select top relevant IDs
+     - *post*: Write "selected_ids", "selected_questions", "rag_state"="filtered" to shared store
+   - *Actions*: "default" → back to RagAgent (end of retrieve_flow), "fallback" → FallbackNode
 
-6. **RagAgent Node**
-   - *Purpose*: Analyze filtered results and decide next action
-   - *Type*: Regular Node with LLM
-   - *Steps*:
-     - *prep*: Read "query", "filtered_candidates", and retrieval metadata
-     - *exec*: Evaluate quality, decide: compose_answer, retry_retrieve, or fallback
-     - *post*: Write "rag_decision" and "rag_reason", route accordingly
-
-7. **ComposeAnswer Node**
-   - *Purpose*: Generate comprehensive medical responses with suggestions
+8. **ComposeAnswer Node**
+   - *Purpose*: Generate comprehensive medical response with persona, sources, and suggestions
    - *Type*: Regular Node with fallback handling
    - *Steps*:
-     - *prep*: Read role, query, filtered_candidates, and conversation history
-     - *exec*: Call LLM for structured response generation with persona
-     - *post*: Write "answer_obj" with explain and suggestion_questions, handle API overload
+     - *prep*: Read "role", "retrieval_query" or "query", "selected_ids", "context_summary" from shared store; fetch full QA pairs using get_full_qa_by_ids()
+     - *exec*: Call LLM with persona prompt to generate structured YAML response {explanation, suggestion_questions}
+     - *post*: Parse YAML, write "answer_obj", "explain", "suggestion_questions" to shared store
+   - *Actions*: "default" → END, "fallback" → FallbackNode
 
-8. **FallbackNode**
-   - *Purpose*: Robust fallback mechanism for API overload scenarios
-   - *Type*: Regular Node (no LLM calls)
+9. **FallbackNode**
+   - *Purpose*: Minimal fallback for API overload - no LLM calls
+   - *Type*: Regular Node (no exec logic)
    - *Steps*:
-     - *prep*: Read query, role, and topic information
-     - *exec*: Direct knowledge base lookup with exact matching
-     - *post*: Write fallback response with generic suggestions
+     - *prep*: Return None
+     - *exec*: Return None
+     - *post*: Write generic error message to "explain" and empty "suggestion_questions"
+   - *Actions*: "default" → END

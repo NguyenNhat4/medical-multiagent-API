@@ -21,15 +21,12 @@ class QueryExpandAgent(Node):
     """Agent mở rộng câu hỏi mơ hồ thành câu hỏi cụ thể hơn"""
 
     def prep(self, shared):
-        logger.info("🔍 [QueryExpandAgent] PREP - Đọc query và context")
         query = shared.get("retrieval_query") or shared.get("query")
 
         role = shared.get("role", "")
         formatted_history = shared.get("formatted_conversation_history", "")
         demuc = shared.get("demuc", "")
         chu_de_con = shared.get("chu_de_con", "")
-
-        logger.info(f"🔍 [QueryExpandAgent] PREP - Query: {query[:50]}..., Has history: {bool(formatted_history)}")
         return query, role, demuc, chu_de_con, formatted_history
 
     def exec(self, inputs):
@@ -40,7 +37,6 @@ class QueryExpandAgent(Node):
         from config.timeout_config import timeout_config
 
         query, role, demuc, chu_de_con, formatted_history = inputs
-        logger.info(f"🔍 [QueryExpandAgent] EXEC - Query: '{query[:50]}...', DEMUC: '{demuc}', CHU_DE_CON: '{chu_de_con}'")
 
         # Build context about the topic classification
         topic_context = ""
@@ -86,8 +82,6 @@ reason: "Lý do ngắn gọn"
 
         try:
             resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
-            logger.info(f"🔍 [QueryExpandAgent] EXEC - LLM response: {resp}")
-
             result = parse_yaml_with_schema(
                 resp,
                 required_fields=["expanded_query"],
@@ -96,7 +90,6 @@ reason: "Lý do ngắn gọn"
             )
 
             if result:
-                logger.info(f"🔍 [QueryExpandAgent] EXEC - Expanded result: {result}")
                 return result
         except APIOverloadException as e:
             logger.warning(f"🔍 [QueryExpandAgent] EXEC - API overloaded: {e}")
@@ -118,7 +111,7 @@ reason: "Lý do ngắn gọn"
         shared["query"] = expanded_query  # Replace with expanded query
         shared["expansion_confidence"] = exec_res.get("confidence", "low")
 
-        logger.info(f"🔍 [QueryExpandAgent] POST - Query expanded from '{original_query[:50]}...' to '{expanded_query[:50]}...'")
+        logger.info(f"🔍 [QueryExpandAgent] POST - Query expanded from '{original_query}...' to '{expanded_query}...'")
 
         # Check for API overload
         if exec_res.get("api_overload", False):

@@ -44,10 +44,11 @@ def retrieve_from_qdrant(
     chu_de_con: Optional[str] = None,
     top_k: int = 20,
     collection_name: str = "bnrhm",
-    qdrant_url: str = os.getenv("QDRANT_URL")
+    qdrant_url: str = os.getenv("QDRANT_URL"),
+    use_late_interaction: bool = True
 ) -> List[Dict[str, Any]]:
     """
-    Retrieve documents from Qdrant using hybrid search (dense + sparse + late interaction).
+    Retrieve documents from Qdrant using hybrid search (dense + sparse + [optional] late interaction).
 
     Input:
         - query (str): User's question
@@ -56,37 +57,27 @@ def retrieve_from_qdrant(
         - top_k (int): Number of results to return (default: 20)
         - collection_name (str): Qdrant collection name (role-specific: bndtd, bsnt, bnrhm, bsrhm)
         - qdrant_url (str): Qdrant server URL
+        - use_late_interaction (bool): Whether to use ColBERT late interaction (default: True)
 
     Output:
         List of dicts with keys: id, score, DEMUC, CHUDECON, CAUHOI, CAUTRALOI, GIAITHICH
-        Example:
-        [
-            {
-                "id": 112,
-                "score": 22.376976,
-                "DEMUC": "BỆNH ĐÁI THÁO ĐƯỜNG",
-                "CHUDECON": "Triệu chứng",
-                "CAUHOI": "Tại sao nhiễm trùng...",
-                "CAUTRALOI": "...",
-                "GIAITHICH": "..."
-            },
-            ...
-        ]
-
-    Necessity: Used by RetrieveFromKB node to get relevant QA pairs from vector DB
     """
     try:
-        logger.info(f"[retrieve_from_qdrant] Query: '{query}...', DEMUC: '{demuc}', CHU_DE_CON: '{chu_de_con}'")
+        logger.info(f"[retrieve_from_qdrant] Query: '{query}...', Filters: demuc={demuc}, sub={chu_de_con}, LateInteraction={use_late_interaction}")
 
         # Get embedding models
         dense_model, sparse_model, late_interaction_model = _get_embedding_models()
 
-        # Embed query with all 3 methods
+        # Embed query
         dense_vectors = next(dense_model.query_embed(query))
         sparse_vectors = next(sparse_model.query_embed(query))
-        late_vectors = next(late_interaction_model.query_embed(query))
+        
+        # Only compute late interaction vectors if needed
+        late_vectors = None
+        if use_late_interaction:
+            late_vectors = next(late_interaction_model.query_embed(query))
 
-        logger.info(f"[retrieve_from_qdrant] Query embeddings generated")
+        logger.info(f"[retrieve_from_qdrant] Query embeddings generated (LI={use_late_interaction})")
 
         # Create Qdrant client
         client = QdrantClient(url=qdrant_url)
@@ -96,12 +87,12 @@ def retrieve_from_qdrant(
             models.Prefetch(
                 query=dense_vectors,
                 using="all-MiniLM-L6-v2",
-                limit=top_k,
+                limit=top_k + 100,
             ),
             models.Prefetch(
                 query=models.SparseVector(**sparse_vectors.as_object()),
                 using="bm25",
-                limit=top_k,
+                limit=top_k + 100,
             ),
         ]
 
@@ -127,15 +118,27 @@ def retrieve_from_qdrant(
             logger.info(f"[retrieve_from_qdrant] Applying filters: DEMUC={demuc}, CHU_DE_CON={chu_de_con}")
 
         # Execute hybrid search
-        results = client.query_points(
-            collection_name,
-            prefetch=prefetch,
-            query=late_vectors,
-            using="colbertv2.0",
-            with_payload=True,
-            limit=top_k,
-            query_filter=query_filter
-        )
+        if use_late_interaction and late_vectors is not None:
+            # Case 1: Late Interaction (ColBERT) as root query
+            results = client.query_points(
+                collection_name,
+                prefetch=prefetch,
+                query=late_vectors,
+                using="colbertv2.0",
+                with_payload=True,
+                limit=top_k,
+                query_filter=query_filter
+            )
+        else:
+            # Case 2: No Late Interaction -> Use Fusion (RRF) of prefetch results
+            results = client.query_points(
+                collection_name,
+                prefetch=prefetch,
+                query=models.FusionQuery(fusion=models.Fusion.RRF),
+                with_payload=True,
+                limit=top_k,
+                query_filter=query_filter
+            )
 
         logger.info(f"[retrieve_from_qdrant] Retrieved {len(results.points)} results")
 

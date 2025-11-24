@@ -92,3 +92,7 @@ models/
 
 # ignore file start with test in main root
 test.*
+
+.env
+.env.local
+.env.docker

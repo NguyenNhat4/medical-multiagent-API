@@ -22,7 +22,7 @@ class TopicClassifyAgent(Node):
     """
     Agent phân loại chủ đề:
       - DEMUC (bắt buộc, nếu chưa có)
-      - CHU_DE_CON (chỉ làm khi DEMUC đã có)
+      - CHU_DE_CON (ĐÃ BỎ - KHÔNG CẦN PHÂN LOẠI NỮA)
 
     Quy ước PocketFlow:
       - prep(): chỉ đọc từ shared
@@ -34,10 +34,6 @@ class TopicClassifyAgent(Node):
          - Lấy danh sách DEMUC theo role
          - Gọi classify_demuc_with_llm
          - Trả về demuc, chu_de_con=""
-      B) Nếu đã có demuc nhưng chưa có chu_de_con:
-         - Lấy danh sách CHU_DE_CON theo (role, demuc)
-         - Gọi classify_chu_de_con_with_llm
-         - Trả về demuc giữ nguyên, chu_de_con đã phân loại
     """
 
     def prep(self, shared):
@@ -47,20 +43,25 @@ class TopicClassifyAgent(Node):
 
         role = shared.get("role", "")
         current_demuc = shared.get("demuc", "")
-        current_chu_de_con = shared.get("chu_de_con", "")
-
-        return query, role, current_demuc, current_chu_de_con
+        # current_chu_de_con = shared.get("chu_de_con", "") # Not used anymore
+        current_chu_de_con = "" 
+        rag_state = shared.get("rag_state", "")
+        
+        if rag_state == "create_retrieval_query_reason":
+            current_demuc = ""
+            
+        return query, role, current_demuc, current_chu_de_con, rag_state
 
     def exec(self, inputs):
-        query, role, current_demuc, current_chu_de_con = inputs
-
+        query, role, current_demuc, current_chu_de_con, rag_state = inputs
+        demuc_result = {"confidence": "", "reason": ""}
         from utils.knowledge_base.metadata_utils import (
             get_demuc_list_for_role,
-            get_chu_de_con_for_demuc,
             format_demuc_list_for_prompt
         )
+        
         if not current_demuc:
-            from utils.llm.classify_topic import classify_demuc_with_llm,classify_chu_de_con_with_llm
+            from utils.llm.classify_topic import classify_demuc_with_llm
             
             # Only classify DEMUC (no CHU_DE_CON classification)
             
@@ -84,21 +85,22 @@ class TopicClassifyAgent(Node):
                 return {"demuc": "", "chu_de_con": "", "confidence": "low", "api_overload": True}
             
             current_demuc = demuc_result.get("demuc", "")
-            assert current_demuc != "", "DEMUC is not classified" 
+            # assert current_demuc != "", "DEMUC is not classified" 
             
             logger.info(f'🏷️ [TopicClassifyAgent] EXEC - Classification result: DEMUC="{demuc_result.get("demuc", "")}", confidence="{demuc_result.get("confidence", "low")}", reason="{demuc_result.get("reason", "")}" ')
 
-        if not current_chu_de_con:          
-            chu_de_con_list_str = get_chu_de_con_for_demuc(role=role,demuc=current_demuc)
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available chu_de_cons: {chu_de_con_list_str}")
+        # NO LONGER CLASSIFY SUB-TOPIC (CHU_DE_CON)
+        # if not current_chu_de_con and rag_state != "create_retrieval_query_reason":          
+        #     chu_de_con_list_str = get_chu_de_con_for_demuc(role=role,demuc=current_demuc)
+        #     logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Available chu_de_cons: {chu_de_con_list_str}")
             
-            chu_de_con_result = classify_chu_de_con_with_llm(query = query, demuc =current_demuc,chu_de_con_list_str=chu_de_con_list_str)
-            current_chu_de_con = chu_de_con_result.get("chu_de_con","")
-            logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classification chu_de_cons: {current_chu_de_con}")
-
+        #     chu_de_con_result = classify_chu_de_con_with_llm(query = query, demuc =current_demuc,chu_de_con_list_str=chu_de_con_list_str)
+        #     current_chu_de_con = chu_de_con_result.get("chu_de_con","")
+        #     logger.info(f"🏷️ [TopicClassifyAgent] EXEC - Classification chu_de_cons: {current_chu_de_con}")
+     
         return {
             "demuc": current_demuc,
-            "chu_de_con": current_chu_de_con, 
+            "chu_de_con": "", # Always empty
             "confidence": demuc_result.get("confidence", "low"),
             "reason": demuc_result.get("reason", "")
         }     
@@ -107,7 +109,7 @@ class TopicClassifyAgent(Node):
 
         # Update shared with classification results - WRITE ONLY
         shared["demuc"] = exec_res.get("demuc", "")
-        shared["chu_de_con"] = exec_res.get("chu_de_con", "")  # Always empty now
+        shared["chu_de_con"] = "" # exec_res.get("chu_de_con", "")  # Always empty now
         shared["classification_confidence"] = exec_res.get("confidence", "low")
 
 
@@ -116,4 +118,3 @@ class TopicClassifyAgent(Node):
             return "fallback"
         # Classification complete - proceed to retrieval
         return "default"  # Go to next node (RetrieveFromKB)
-

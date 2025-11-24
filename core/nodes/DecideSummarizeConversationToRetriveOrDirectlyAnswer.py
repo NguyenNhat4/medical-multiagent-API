@@ -20,12 +20,10 @@ else:
 class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
 
     def prep(self, shared):
-        logger.info("[DecideSummarizeConversationToRetriveOrDirectlyAnswer] PREP - Đọc query và formatted history để phân loại RAG vs chitchat")
         query = shared.get("query")
 
         role = shared.get("role", "")
         formatted_history = shared.get("formatted_conversation_history", "")
-        logger.info(f"[DecideSummarizeConversationToRetriveOrDirectlyAnswer] PREP - Query: {query[:50]}..., Has history: {bool(formatted_history)}")
         return query, role, formatted_history
 
     def exec(self, inputs):
@@ -36,7 +34,6 @@ class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
         from config.timeout_config import timeout_config
         from utils.role_enum import RoleEnum, ROLE_DISPLAY_NAME
         query, role, formatted_history = inputs
-        logger.info("[DecideSummarizeConversationToRetriveOrDirectlyAnswer] EXEC - Deciding and responding")
         user_role_name =  ROLE_DISPLAY_NAME.get(RoleEnum(role))
         # Build conversation history context if available
         history_context = ""
@@ -51,7 +48,7 @@ Lịch sử hội thoại gần đây:
 current user input: "{query}"
 user role: {user_role_name}
 Chọn 1 trong 2 Hành động:
-- direct_response: chào, hỏi người dùng  để hiểu họ cần hỗ trợ gì về y tế.
+- direct_response: chào, hỏi người dùng  để hiểu họ cần hỗ trợ gì về y tế, trả lời trực tiếp hội thoại đủ thông tin, hoặc bị lặp lại.
 - retrieve_kb: chuyển tiếp cho rag agent tra kiến thức y tế chuẩn để trả lời.
 Lưu ý:
 - Hãy dựa vào ngữ cảnh hội thoại để hiểu câu hỏi và quyết định phù hợp
@@ -88,7 +85,6 @@ Trả về YAML như mẫu :
             if decision_type == "direct_response":
                 assert explanation != "" , "Câu trả lời không được rỗng"
                 
-            logger.info(f"[DecideSummarizeConversationToRetriveOrDirectlyAnswer] EXEC - Type: {decision_type}, Explanation length: {len(explanation)}, Context summary: '{context_summary[:50] if context_summary else 'N/A'}...'")
 
             return {"type": decision_type, "explanation": explanation, "context_summary": context_summary}
 
