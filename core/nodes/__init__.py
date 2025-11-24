@@ -12,7 +12,6 @@ from .DecideSummarizeConversationToRetriveOrDirectlyAnswer import DecideSummariz
 from .RetrieveFromKB import RetrieveFromKB
 from .ComposeAnswer import ComposeAnswer
 from .FallbackNode import FallbackNode
-from .FilterAgent import FilterAgent
 from .RagAgent import RagAgent
 from .QueryExpandAgent import QueryExpandAgent
 from .TopicClassifyAgent import TopicClassifyAgent
@@ -40,7 +39,6 @@ __all__ = [
     "RetrieveFromKB",
     "ComposeAnswer",
     "FallbackNode",
-    "FilterAgent",
     "RagAgent",
     "QueryExpandAgent",
     "TopicClassifyAgent",

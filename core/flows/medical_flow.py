@@ -14,12 +14,11 @@ else:
 
 def create_retrieve_flow(fallback_node):
     """
-    Create a reusable retrieval sub-flow: topic_classify → retrieve_kb → filter_agent
+    Create a reusable retrieval sub-flow: topic_classify → retrieve_kb
 
     This flow handles:
     1. Topic classification (DEMUC only)
     2. Retrieval from knowledge base
-    3. Filtering candidates
 
     Args:
         fallback_node: The parent flow's fallback node to route errors to
@@ -28,7 +27,7 @@ def create_retrieve_flow(fallback_node):
         Flow: A flow that starts with topic_classify
     """
     from ..nodes import   (
-         RetrieveFromKB, FilterAgent,TopicClassifyAgent
+         RetrieveFromKB, TopicClassifyAgent
     )
     
     from pocketflow import Flow 
@@ -37,19 +36,12 @@ def create_retrieve_flow(fallback_node):
     # Create retrieval pipeline nodes
     topic_classify = TopicClassifyAgent(max_retries=3,wait=2)
     retrieve_kb = RetrieveFromKB()
-    filter_agent = FilterAgent()
-    
     
     topic_classify >> retrieve_kb  
-    # retrieve_kb → filter_agent
-    retrieve_kb >> filter_agent
     retrieve_kb - "fallback" >> fallback_node
 
-    # filter_agent → default (will return to parent flow)
-    filter_agent - "fallback" >> fallback_node
-
     retrieve_flow = Flow(start=topic_classify)
-    logger.info("[retrieve_flow] Retrieval sub-flow created: topic_classify → retrieve_kb → filter_agent")
+    logger.info("[retrieve_flow] Retrieval sub-flow created: topic_classify → retrieve_kb")
     return retrieve_flow
 
 
@@ -103,3 +95,6 @@ def create_oqa_orthodontist_flow():
     from pocketflow import Flow 
     
     return Flow(start=None)
+
+
+    
