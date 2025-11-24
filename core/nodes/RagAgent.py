@@ -76,7 +76,7 @@ Chọn một trong các actions sau:
 - compose_answer: Chuyển tiếp cho agent khác để soạn trả lời nếu các câu hỏi được truy xuất có liên quan cao, Và bắt buộc  nếu  Retrieve attempts lớn hơn {MAX_RETRIEVAL_LOOPS}.
 
 ```yaml
-reason: <Giải thích ngắn gọn tại sao chọn action này dựa trên tiêu chí đánh giá>
+reason: <nếu chọn create_retrieval_query cân giải thích để agent khác hiểu tại sao và cần update lại như thế nào>
 next_action: <create_retrieval_query | retrieve_kb | compose_answer>
 ```
 
@@ -84,9 +84,10 @@ Trả về chính xác cấu trúc yml trên:
 """
 
         try:
-            logger.info(f"  [RagAgent] EXEC - prompts :{prompt}")
+            logger.info(f"  [RagAgent] EXEC - prompt :{prompt}")
             
             resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
+            logger.info(f"  [RagAgent] EXEC - resp :{resp}")
 
             result = parse_yaml_with_schema(
                 resp,
