@@ -18,6 +18,9 @@ else:
     logger = logging.getLogger(__name__)
     logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
 
+# Constants
+MAX_RETRIEVAL_LOOPS = 2  # Maximum number of retrieval attempts before forcing compose_answer
+
 
 class RagAgent(Node):
     """
@@ -35,10 +38,17 @@ class RagAgent(Node):
         logger.info("  [RagAgent] PREP - Analyzing current state and making decision")
         query = shared.get("retrieval_query") or shared.get("query")
         rag_state = shared.get("rag_state", "init") 
-        retrieve_attempts = shared.get("retrieve_attempts", 1)
-        selected_questions = shared.get("selected_questions", "Chưa có  câu hỏi  nào được retrieve")
-        context_summary  = shared.get("context_summary",  "")
-        return query, rag_state, retrieve_attempts,selected_questions,context_summary
+        attempts = shared.get("attempts", 1)
+        selected_questions = shared.get("selected_questions", "Chưa có câu hỏi nào được retrieve")
+        context_summary = shared.get("context_summary", "")
+        action_history = shared.get("action_history", [])
+
+        # Hard check: Force compose_answer if max attempts reached to prevent infinite loops
+        if attempts > MAX_RETRIEVAL_LOOPS:
+            logger.warning(f"  [RagAgent] Max retrieval attempts ({MAX_RETRIEVAL_LOOPS}) reached. Forcing compose_answer.")
+            return None  # Signal to exec to skip LLM call and return compose_answer
+        
+        return query, rag_state, attempts, selected_questions, context_summary,action_history
 
     def exec(self, inputs):
         from utils.llm import call_llm
@@ -46,29 +56,33 @@ class RagAgent(Node):
         from utils.auth import APIOverloadException
         from config.timeout_config import timeout_config
         
-        query, rag_state, retrieve_attempts,selected_questions,context_summary= inputs
-        conversation_context = f"Ngữ cảnh hội thoại:{context_summary}" if  context_summary else ""
+        # Handle hard check fallback from prep()
+        if inputs is None:
+            return {"next_action": "compose_answer", "reason": "Max retrieval attempts reached"}
         
-        
+        query, rag_state, attempts, selected_questions, context_summary = inputs
+        conversation_context = f"Hội thoại tóm tắt (Context): {context_summary}" if context_summary else "Hội thoại vừa bắt đầu."
+        current_knowledge = selected_questions if selected_questions else "Chưa có thông tin (Empty)"
         prompt = f"""Bạn là Orchestrator RAG Agent đưa ra quyết định dựa vào thông tin sau.
 User query: "{query}"
-Retrieve attempts: {retrieve_attempts}/{self.max_retries}
-Trạng thái trước đó:{rag_state}
-Danh sách câu hỏi đã retrieve: 
-{selected_questions}
-{conversation_context}
-Chọn một trong các actions sau:
-- create_retrieval_query: Update lại user query nếu nó không đủ thông tin để retrieve.
-- retrieve_kb: truy xuất thông tin QA dùng user query ,nếu không có câu hỏi đã retrieve nào liên quan tới user query.
-- compose_answer: Chuyển tiếp cho agent khác để soạn trả lời nếu các câu hỏi được truy xuất có liên quan cao. 
+Attempts: {attempts}/{MAX_RETRIEVAL_LOOPS}
 
+Trạng thái trước đó: {rag_state}
+Thông tin đã tìm được với query: 
+{current_knowledge}
+{conversation_context}
+Tiêu chí đánh giá:
+Chọn một trong các actions sau:
+- create_retrieval_query: Update lại retrieval query nếu  Query bị thiếu ngữ cảnh,.
+- retrieve_kb: Truy xuất thông tin QA dùng user query, nếu không có câu hỏi đã retrieve nào liên quan tới user query.
+- compose_answer: Chuyển tiếp cho agent khác để soạn trả lời nếu các câu hỏi được truy xuất có liên quan cao, Và bắt buộc  nếu  Retrieve attempts lớn hơn {MAX_RETRIEVAL_LOOPS}.
 
 ```yaml
-next_action: <chọn 1 trong Actions>
-reason: <lý do để agent khác hiểu tại sao và cần làm gì>
+reason: <Giải thích ngắn gọn tại sao chọn action này dựa trên tiêu chí đánh giá>
+next_action: <create_retrieval_query | retrieve_kb | compose_answer>
 ```
 
-Trả về chính xác câu trúc yml trên:
+Trả về chính xác cấu trúc yml trên:
 """
 
         try:
@@ -83,11 +97,14 @@ Trả về chính xác câu trúc yml trên:
             )
 
             # Validate action
-            valid_actions = ["retrieve_kb", "compose_answer","create_retrieval_query"]
+            valid_actions = ["retrieve_kb", "compose_answer", "create_retrieval_query"]
             if result["next_action"] not in valid_actions:
-                raise ValueError(f"Invalid action: {result['next_action']}")
+                logger.warning(f"  [RagAgent] Invalid action '{result['next_action']}', falling back to compose_answer")
+                return {"next_action": "compose_answer", "reason": "Invalid LLM action","attempts": attempts}
+            assert result["next_action"] in valid_actions , f"Next action must be in valid actions: {valid_actions}"
             logger.info(f"  [RagAgent] Decision: {result['next_action']} - {result['reason']}")
-            return result
+            result["attempts"] = attempts
+            return result 
 
         except APIOverloadException:
             logger.error("  [RagAgent] API overloaded")
@@ -99,16 +116,19 @@ Trả về chính xác câu trúc yml trên:
     def post(self, shared, prep_res, exec_res):
         next_action = exec_res["next_action"]
         reason = exec_res.get("reason", "")
-        current_attempts = shared.get("retrieve_attempts", 0)
+        current_attempts = exec_res.get("attempts", 0)
         shared['create_retrieval_query_reason'] = ""
         logger.info(f"  [RagAgent] POST - Next action: '{next_action}' | Reason: {reason} | Current attempts: {current_attempts}")
-
+        logger.info(f"  [RagAgent] POST - Retrying retrieval pipeline (attempt {current_attempts }/{MAX_RETRIEVAL_LOOPS})")
+        
         # Update state based on next action
         if next_action == "retrieve_kb":
-            # Increment retrieve attempts counter
-            shared["retrieve_attempts"] = current_attempts + 1
-            shared["rag_state"] = "init"  # Reset to init for retrieve_flow to start fresh
-            logger.info(f"  [RagAgent] POST - Retrying retrieval pipeline (attempt {current_attempts + 1}/2)")
+            # Safety check: prevent infinite loops even if LLM decides to retrieve again
+            if current_attempts >= MAX_RETRIEVAL_LOOPS:
+                logger.warning(f"  [RagAgent] POST - Blocking retrieve_kb (attempts {current_attempts} >= {MAX_RETRIEVAL_LOOPS}), forcing compose_answer")
+                shared["rag_state"] = "composing"
+                return "compose_answer"
+            
             return "retrieve_kb"
         elif next_action == "compose_answer":
             shared["rag_state"] = "composing"
