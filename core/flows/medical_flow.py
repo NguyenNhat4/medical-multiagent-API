@@ -3,6 +3,7 @@ import logging
 # Configure logging for this module with Vietnam timezone
 from utils.timezone_utils import setup_vietnam_logging
 from config.logging_config import logging_config
+from tracing import trace_flow, TracingConfig
 
 if logging_config.USE_VIETNAM_TIMEZONE:
     logger = setup_vietnam_logging(__name__, 
@@ -11,7 +12,7 @@ if logging_config.USE_VIETNAM_TIMEZONE:
 else:
     logger = logging.getLogger(__name__)
     logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
-
+@trace_flow(flow_name="retrievalFlow")
 def create_retrieve_flow(fallback_node):
     """
     Create a reusable retrieval sub-flow: topic_classify → retrieve_kb
@@ -44,7 +45,7 @@ def create_retrieve_flow(fallback_node):
     logger.info("[retrieve_flow] Retrieval sub-flow created: topic_classify → retrieve_kb")
     return retrieve_flow
 
-
+@trace_flow(flow_name="medFlow")
 def create_med_agent_flow():
     from ..nodes import (
         IngestQuery, DecideSummarizeConversationToRetriveOrDirectlyAnswer, RagAgent, ComposeAnswer,
