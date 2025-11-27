@@ -53,8 +53,7 @@ class QueryCreatingForRetrievalAgent(Node):
         reason_final = f"- Lý do cần tạo là: {reason}" if reason else ""
     
         
-        prompt = f"""Bạn là hệ thống tạo câu hỏi để truy vấn  mục tiêu là  lọc ra các câu hỏi liên quan nhất từ bộ câu hỏi QA y khoa.
-
+        prompt = f"""
 BỐI CẢNH:
 -Tóm tắt hội thoại trước đó: {context_summary}
 - Câu hỏi hiện tại của người dùng: "{current_user_input}"
@@ -63,13 +62,12 @@ BỐI CẢNH:
         {topic_context}
 
 NHIỆM VỤ:
-- Tạo một câu hỏi để  truy vấn (retrieval_query) dựa vào bối cảnh đã cung cấp trước đó.
-
+- Viết lại câu hỏi người dùng cho rõ ràng hơn để truy vấn thông tin từ vector database.
 
 Trả về CHỈ một code block YAML hợp lệ:
 
 ```yaml
-retrieval_query: "Câu truy vấn tối ưu để tìm kiếm"
+retrieval_query: "Câu hỏi đã được viết lại cho rõ ràng hơn"
 reason: "Lý do ngắn gọn về cách tạo query"
 confidence: "high"  # hoặc medium, low
 ```"""

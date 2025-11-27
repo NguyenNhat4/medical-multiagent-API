@@ -5,8 +5,10 @@ from pocketflow import Flow
 from utils.timezone_utils import setup_vietnam_logging
 from config.logging_config import logging_config
 from tracing import trace_flow, TracingConfig
-from ..nodes import   (
-        RetrieveFromKB, TopicClassifyAgent
+from ..nodes import (
+    RetrieveFromKBWithDemuc,
+    RetrieveFromKBWithoutDemuc,
+    TopicClassifyAgent
 )
 from ..nodes import (
     IngestQuery, DecideSummarizeConversationToRetriveOrDirectlyAnswer, RagAgent, ComposeAnswer,
@@ -21,43 +23,26 @@ else:
     logger.setLevel(getattr(logging, logging_config.LOG_LEVEL.upper()))
     
 
-@trace_flow(flow_name="RetrieveFlow")
-class RetrievalFlow(Flow):
-    def __init__(self):
-        topic_classify = TopicClassifyAgent(max_retries=3, wait=2)
-        retrieve_kb = RetrieveFromKB()
-        fallback = FallbackNode()
-        
-        topic_classify >> retrieve_kb
-        topic_classify - "fallback" >> fallback
-        
-        super().__init__(start=topic_classify)
-
-
 @trace_flow(flow_name="MedFlow")
 class MedFlow(Flow):
     def __init__(self):
         ingest = IngestQuery()
+        topic_classify = TopicClassifyAgent(max_retries=2)
+        
         main_decision = DecideSummarizeConversationToRetriveOrDirectlyAnswer()
         fallback = FallbackNode()
         rag_agent = RagAgent(max_retries=2)
         compose_answer = ComposeAnswer()
         better_retrieval_query = QueryCreatingForRetrievalAgent()
         
-        # Create retrieve_flow sub-flow
-        retrieve_flow = RetrievalFlow()
-        
+        retrieve_with_demuc = RetrieveFromKBWithDemuc()
         ingest >> main_decision
         
         # Step 2: From MainDecision
         main_decision - "retrieve_kb" >> rag_agent
-        # Note: "direct_response" action has NO connection -> flow ends, answer already in shared
 
-        rag_agent - "create_retrieval_query" >> better_retrieval_query  
-        better_retrieval_query >> retrieve_flow
-        rag_agent - "retrieve_kb" >> retrieve_flow  # Loop back for more retrieval
-        retrieve_flow >> rag_agent
-        
+        rag_agent - "create_retrieval_query" >> better_retrieval_query >> retrieve_with_demuc >> compose_answer
+        rag_agent - "retrieve_kb" >> topic_classify >> retrieve_with_demuc  # Loop back for more retrieval
         rag_agent - "compose_answer" >> compose_answer
         
         # Fallback  
