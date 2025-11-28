@@ -43,14 +43,30 @@ class ComposeAnswer(Node):
         query = shared.get("retrieval_query") or shared.get("query")
         query_source = "retrieval_query" if shared.get("retrieval_query") else "query"
         
-        selected_ids = shared.get("selected_ids", [])
-        # Map role to collection name
+        # Check if we have multi-collection IDs (new format)
+        selected_ids_by_collection = shared.get("selected_ids_by_collection", {})
+        selected_ids = shared.get("selected_ids", [])  # Legacy fallback
+        
+        # Map role to collection name (for legacy fallback)
         collection_name = ROLE_TO_COLLECTION.get(role, "bnrhm")
 
-        logger.info(f"✍️ [ComposeAnswer] PREP - Role: '{role}' -> Collection: '{collection_name}', Query source: '{query_source}', Query: '{query[:50] if query else 'None'}...', Selected IDs: {selected_ids}")
+        logger.info(f"✍️ [ComposeAnswer] PREP - Role: '{role}' -> Collection: '{collection_name}', Query source: '{query_source}', Query: '{query[:50] if query else 'None'}...'")
 
         # Fetch full QA data from Qdrant using IDs
-        if selected_ids:
+        retrieved_qa = []
+        
+        if selected_ids_by_collection:
+            # New format: fetch from multiple collections
+            logger.info(f"✍️ [ComposeAnswer] PREP - Fetching from multiple collections: {list(selected_ids_by_collection.keys())}")
+            for coll_name, ids in selected_ids_by_collection.items():
+                if ids:
+                    qa_batch = get_full_qa_by_ids(ids, collection_name=coll_name)
+                    retrieved_qa.extend(qa_batch)
+                    logger.info(f"✍️ [ComposeAnswer] PREP - Retrieved {len(qa_batch)} QA pairs from '{coll_name}'")
+            logger.info(f"✍️ [ComposeAnswer] PREP - Total retrieved: {len(retrieved_qa)} full QA pairs from all collections")
+        elif selected_ids:
+            # Legacy format: fetch from single collection
+            logger.info(f"✍️ [ComposeAnswer] PREP - Using legacy format, fetching from single collection: '{collection_name}'")
             retrieved_qa = get_full_qa_by_ids(selected_ids, collection_name=collection_name)
             logger.info(f"✍️ [ComposeAnswer] PREP - Retrieved {len(retrieved_qa)} full QA pairs from Qdrant")
         else:

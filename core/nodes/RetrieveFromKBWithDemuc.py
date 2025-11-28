@@ -68,11 +68,11 @@ class RetrieveFromKBWithDemuc(Node):
         collection_name = ROLE_TO_COLLECTION.get(role, "bnrhm")
 
         # Strategy:
-        # 1. Search WITH demuc filter (narrow context)
-        # 2. Search WITHOUT filters (global context)
+        # 1. Search WITH demuc filter on current role's collection (narrow context)
+        # 2. Search WITHOUT filters on ALL 4 collections (global context)
         # 3. Combine and deduplicate
 
-        # 1. Filtered search (by demuc only)
+        # 1. Filtered search (by demuc only) on current role's collection
         retrieved_results_filtered = retrieve_from_qdrant(
             query=retrieve_query,
             demuc=demuc,
@@ -81,24 +81,30 @@ class RetrieveFromKBWithDemuc(Node):
             collection_name=collection_name
         )
         
-        # 2. Global search (no filters)
-        retrieved_results_global = retrieve_from_qdrant(
-            query=retrieve_query,
-            demuc=None,
-            chu_de_con=None,
-            top_k=top_k,
-            collection_name=collection_name
-        )
+        # 2. Global search across ALL 4 collections (no filters)
+        retrieved_results_global = []
+        for col_role, col_name in ROLE_TO_COLLECTION.items():
+            results = retrieve_from_qdrant(
+                query=retrieve_query,
+                demuc=None,
+                chu_de_con=None,
+                top_k=top_k // 2,  # Get fewer from each collection to balance
+                collection_name=col_name
+            )
+            retrieved_results_global.extend(results)
+            logger.info(f"📚 [RetrieveFromKBWithDemuc] Global search from '{col_name}': {len(results)} results")
         
         # 3. Combine results: Filtered first (more relevant), then Global
         retrieved_results = retrieved_results_filtered + retrieved_results_global
         
-        # Deduplicate by ID
-        seen_ids = set()
+        # Deduplicate by (collection, ID) pair since IDs may overlap across collections
+        seen_keys = set()
         unique_results = []
         for entry in retrieved_results:
-            if entry["id"] not in seen_ids:
-                seen_ids.add(entry["id"])
+            # Create unique key: (collection, id) to handle duplicate IDs across collections
+            entry_key = (entry.get("collection", ""), entry["id"])
+            if entry_key not in seen_keys:
+                seen_keys.add(entry_key)
                 unique_results.append(entry)
 
         # Sort by score descending
@@ -107,10 +113,11 @@ class RetrieveFromKBWithDemuc(Node):
         # Take top k results
         top_results = unique_results[:top_k]
 
-        # Extract lightweight candidates: {id, CAUHOI, score}
+        # Extract lightweight candidates: {id, collection, CAUHOI, score}
         candidates = [
             {
                 "id": result["id"],
+                "collection": result.get("collection", collection_name),  # Preserve collection info
                 "CAUHOI": result["CAUHOI"],
                 "score": result.get("score", 0)
             }
@@ -120,7 +127,7 @@ class RetrieveFromKBWithDemuc(Node):
         logger.info(f"📚 [RetrieveFromKBWithDemuc] Query: {retrieve_query}")
         logger.info(f"📚 [RetrieveFromKBWithDemuc] Demuc filter: {demuc}")
         logger.info(f"📚 [RetrieveFromKBWithDemuc] Retrieved {len(candidates)} candidates (hybrid search)")
-        logger.info(f"📚 [RetrieveFromKBWithDemuc] Filtered results: {len(retrieved_results_filtered)}, Global results: {len(retrieved_results_global)}")
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] Filtered results: {len(retrieved_results_filtered)}, Global results: {len(retrieved_results_global)} (from all collections)")
         
         return candidates
 
@@ -130,9 +137,20 @@ class RetrieveFromKBWithDemuc(Node):
         # Save lightweight candidates to shared store
         shared["retrieved_candidates"] = candidates
         
-        # Direct pass-through: Save selected IDs and questions
-        shared["selected_ids"] = [c["id"] for c in candidates]
+        # Group IDs by collection for efficient multi-collection retrieval
+        ids_by_collection = {}
+        for c in candidates:
+            collection = c.get("collection", "bnrhm")
+            if collection not in ids_by_collection:
+                ids_by_collection[collection] = []
+            ids_by_collection[collection].append(c["id"])
+        
+        # Save both formats for compatibility
+        shared["selected_ids"] = [c["id"] for c in candidates]  # Legacy format
+        shared["selected_ids_by_collection"] = ids_by_collection  # New format for multi-collection
         shared["selected_questions"] = [c["CAUHOI"] for c in candidates]
+        
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] POST - IDs grouped by collection: {[(k, len(v)) for k, v in ids_by_collection.items()]}")
         
         # Update RAG state
         shared["rag_state"] = "retrieved"

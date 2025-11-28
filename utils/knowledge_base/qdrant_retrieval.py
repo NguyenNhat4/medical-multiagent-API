@@ -148,6 +148,7 @@ def retrieve_from_qdrant(
             formatted_results.append({
                 "id": point.id,
                 "score": point.score,
+                "collection": collection_name,  # Add collection name for multi-collection search
                 "DEMUC": point.payload.get("DEMUC", ""),
                 "CHUDECON": point.payload.get("CHUDECON", ""),
                 "CAUHOI": point.payload.get("CAUHOI", ""),

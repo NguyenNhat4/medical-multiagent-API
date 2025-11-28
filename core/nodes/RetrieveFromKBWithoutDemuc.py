@@ -70,10 +70,11 @@ class RetrieveFromKBWithoutDemuc(Node):
             collection_name=collection_name
         )
 
-        # Extract lightweight candidates: {id, CAUHOI, score}
+        # Extract lightweight candidates: {id, collection, CAUHOI, score}
         candidates = [
             {
                 "id": result["id"],
+                "collection": result.get("collection", collection_name),  # Preserve collection info
                 "CAUHOI": result["CAUHOI"],
                 "score": result.get("score", 0)
             }
@@ -91,9 +92,20 @@ class RetrieveFromKBWithoutDemuc(Node):
         # Save lightweight candidates to shared store
         shared["retrieved_candidates"] = candidates
         
-        # Direct pass-through: Save selected IDs and questions
-        shared["selected_ids"] = [c["id"] for c in candidates]
+        # Group IDs by collection for efficient multi-collection retrieval
+        ids_by_collection = {}
+        for c in candidates:
+            collection = c.get("collection", "bnrhm")
+            if collection not in ids_by_collection:
+                ids_by_collection[collection] = []
+            ids_by_collection[collection].append(c["id"])
+        
+        # Save both formats for compatibility
+        shared["selected_ids"] = [c["id"] for c in candidates]  # Legacy format
+        shared["selected_ids_by_collection"] = ids_by_collection  # New format for multi-collection
         shared["selected_questions"] = [c["CAUHOI"] for c in candidates]
+        
+        logger.info(f"📚 [RetrieveFromKBWithoutDemuc] POST - IDs grouped by collection: {[(k, len(v)) for k, v in ids_by_collection.items()]}")
         
         # Update RAG state
         shared["rag_state"] = "retrieved"
