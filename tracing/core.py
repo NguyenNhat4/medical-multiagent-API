@@ -261,13 +261,13 @@ class LangfuseTracer:
             Serialized data that can be sent to Langfuse.
         """
         try:
-            # Handle common PocketFlow data types
-            if hasattr(data, "__dict__"):
+            # Handle JSON-serializable types first (keep as-is for nice UI rendering)
+            if isinstance(data, (dict, list, str, int, float, bool, type(None))):
+                return data
+            # Handle objects with __dict__ attribute
+            elif hasattr(data, "__dict__"):
                 # Convert objects to dict representation
                 return {"_type": type(data).__name__, "_data": str(data)}
-            elif isinstance(data, (dict, list, str, int, float, bool, type(None))):
-                # JSON-serializable types
-                return data
             else:
                 # Fallback to string representation
                 return {"_type": type(data).__name__, "_data": str(data)}

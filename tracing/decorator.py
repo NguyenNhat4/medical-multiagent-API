@@ -216,10 +216,31 @@ def _trace_flow_class(flow_class, config, flow_name, session_id, user_id):
             
             try:
                 result = original_method(*args, **kwargs)
-                self._tracer.end_node_span(span_id, input_data=args, output_data=result)
+                # Extract actual input
+                # Check if first arg is the node instance (bound method) or actual input (unbound)
+                actual_input = None
+                if len(args) > 0:
+                    # If first arg looks like a Node instance, take second arg
+                    first_arg = args[0]
+                    if hasattr(first_arg, '__class__') and 'Node' in first_arg.__class__.__name__:
+                        actual_input = args[1] if len(args) > 1 else None
+                    else:
+                        # First arg is the actual input
+                        actual_input = first_arg
+                
+                self._tracer.end_node_span(span_id, input_data=actual_input, output_data=result)
                 return result
             except Exception as e:
-                self._tracer.end_node_span(span_id, input_data=args, error=e)
+                # Extract actual input
+                actual_input = None
+                if len(args) > 0:
+                    first_arg = args[0]
+                    if hasattr(first_arg, '__class__') and 'Node' in first_arg.__class__.__name__:
+                        actual_input = args[1] if len(args) > 1 else None
+                    else:
+                        actual_input = first_arg
+                
+                self._tracer.end_node_span(span_id, input_data=actual_input, error=e)
                 raise
                 
         return traced_method
@@ -232,10 +253,31 @@ def _trace_flow_class(flow_class, config, flow_name, session_id, user_id):
             
             try:
                 result = await original_method(*args, **kwargs)
-                self._tracer.end_node_span(span_id, input_data=args, output_data=result)
+                # Extract actual input
+                # Check if first arg is the node instance (bound method) or actual input (unbound)
+                actual_input = None
+                if len(args) > 0:
+                    # If first arg looks like a Node instance, take second arg
+                    first_arg = args[0]
+                    if hasattr(first_arg, '__class__') and 'Node' in first_arg.__class__.__name__:
+                        actual_input = args[1] if len(args) > 1 else None
+                    else:
+                        # First arg is the actual input
+                        actual_input = first_arg
+                
+                self._tracer.end_node_span(span_id, input_data=actual_input, output_data=result)
                 return result
             except Exception as e:
-                self._tracer.end_node_span(span_id, input_data=args, error=e)
+                # Extract actual input
+                actual_input = None
+                if len(args) > 0:
+                    first_arg = args[0]
+                    if hasattr(first_arg, '__class__') and 'Node' in first_arg.__class__.__name__:
+                        actual_input = args[1] if len(args) > 1 else None
+                    else:
+                        actual_input = first_arg
+                
+                self._tracer.end_node_span(span_id, input_data=actual_input, error=e)
                 raise
                 
         return traced_async_method
