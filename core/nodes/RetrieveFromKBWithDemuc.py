@@ -27,32 +27,40 @@ ROLE_TO_COLLECTION = {
 }
 
 
-
-
-
-class RetrieveFromKB(Node):
+class RetrieveFromKBWithDemuc(Node):
     """
-    Retrieve relevant QA pairs from Qdrant vector database using hybrid search.
-
-    ID-based architecture - no scoring needed (FilterAgent handles semantic filtering):
-    - prep(): Read query, metadata, and role from shared
-    - exec(): Call Qdrant retrieval utility with role-specific collection
-    - post(): Write lightweight {id, CAUHOI} to shared
-
-    Output: shared["retrieved_candidates"] - list of lightweight candidates
+    Retrieve relevant QA pairs from Qdrant WITH demuc filter + global search.
+    
+    Hybrid retrieval strategy:
+    - prep(): Read query, metadata (demuc), role, and top_k from shared
+    - exec(): 
+        1. Search WITH demuc filter (narrow context)
+        2. Search WITHOUT filters (global context)
+        3. Combine, deduplicate, and sort by score
+    - post(): Write lightweight {id, CAUHOI, score} candidates to shared
+    
+    Output: shared["retrieved_candidates"] - list of lightweight candidates from hybrid search
     """
 
     def prep(self, shared):
         # Read from shared store ONLY
         query = shared.get("retrieval_query") or shared.get("query")
         demuc = shared.get("demuc", "")
-        # chu_de_con = shared.get("chu_de_con", "") # Not used anymore
         top_k = shared.get("top_k", 20)
         role = shared.get("role", RoleEnum.PATIENT_DENTAL.value)
-        return query, demuc, role, top_k
+        return {
+            "query": query,
+            "demuc": demuc,
+            "role": role,
+            "top_k": top_k
+        }
 
     def exec(self, inputs):
-        retrieve_query, demuc, role, top_k = inputs
+        retrieve_query = inputs["query"]
+        demuc = inputs["demuc"]
+        role = inputs["role"]
+        top_k = inputs["top_k"]
+        
         # Call Qdrant retrieval utility function
         from utils.knowledge_base.qdrant_retrieval import retrieve_from_qdrant
 
@@ -60,11 +68,20 @@ class RetrieveFromKB(Node):
         collection_name = ROLE_TO_COLLECTION.get(role, "bnrhm")
 
         # Strategy:
-        # 1. Search WITHOUT filters (global context)
-        # 2. Search WITH demuc filter (narrow context) - if demuc exists
+        # 1. Search WITH demuc filter (narrow context)
+        # 2. Search WITHOUT filters (global context)
         # 3. Combine and deduplicate
 
-        # 1. Global search (no filters)
+        # 1. Filtered search (by demuc only)
+        retrieved_results_filtered = retrieve_from_qdrant(
+            query=retrieve_query,
+            demuc=demuc,
+            chu_de_con=None,  # Ignore sub-topic
+            top_k=top_k,
+            collection_name=collection_name
+        )
+        
+        # 2. Global search (no filters)
         retrieved_results_global = retrieve_from_qdrant(
             query=retrieve_query,
             demuc=None,
@@ -73,35 +90,24 @@ class RetrieveFromKB(Node):
             collection_name=collection_name
         )
         
-        retrieved_results_filtered = []
-        if demuc:
-            # 2. Filtered search (only by demuc, ignore chu_de_con)
-            retrieved_results_filtered = retrieve_from_qdrant(
-                query=retrieve_query,
-                demuc=demuc,
-                chu_de_con=None, # Ignore sub-topic
-                top_k=top_k, # Slightly less than global
-                collection_name=collection_name
-            )
-          
-        # Combine results: Filtered first (more relevant), then Global
+        # 3. Combine results: Filtered first (more relevant), then Global
         retrieved_results = retrieved_results_filtered + retrieved_results_global
         
-        # Filter out duplicate
+        # Deduplicate by ID
         seen_ids = set()
         unique_results = []
-        for e in retrieved_results:
-            if e["id"] not in seen_ids:
-                seen_ids.add(e["id"])
-                unique_results.append(e)
+        for entry in retrieved_results:
+            if entry["id"] not in seen_ids:
+                seen_ids.add(entry["id"])
+                unique_results.append(entry)
 
         # Sort by score descending
         unique_results.sort(key=lambda x: x.get("score", 0), reverse=True)
         
-        # Take top k highest score
-        top_results = unique_results
+        # Take top k results
+        top_results = unique_results[:top_k]
 
-        # Extract lightweight candidates: {id, CAUHOI}
+        # Extract lightweight candidates: {id, CAUHOI, score}
         candidates = [
             {
                 "id": result["id"],
@@ -111,24 +117,24 @@ class RetrieveFromKB(Node):
             for result in top_results
         ]
         
-        questions = [q["CAUHOI"] for q in candidates]
-        logger.info(f"📚 [RetrieveFromKB] Query used to retrieve: {retrieve_query}")
-        logger.info(f"📚 [RetrieveFromKB] Retrieved {len(candidates)} top candidates (sorted by score)")
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] Query: {retrieve_query}")
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] Demuc filter: {demuc}")
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] Retrieved {len(candidates)} candidates (hybrid search)")
+        logger.info(f"📚 [RetrieveFromKBWithDemuc] Filtered results: {len(retrieved_results_filtered)}, Global results: {len(retrieved_results_global)}")
         
         return candidates
 
     def post(self, shared, prep_res, exec_res):
-
         candidates = exec_res
 
         # Save lightweight candidates to shared store
         shared["retrieved_candidates"] = candidates
         
-        # Direct pass-through (replacing FilterAgent logic):
-        # Save selected_ids and selected_questions directly from top candidates
+        # Direct pass-through: Save selected IDs and questions
         shared["selected_ids"] = [c["id"] for c in candidates]
         shared["selected_questions"] = [c["CAUHOI"] for c in candidates]
         
         # Update RAG state
         shared["rag_state"] = "retrieved"
-        return "default" 
+        return "default"
+

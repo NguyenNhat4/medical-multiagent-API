@@ -27,7 +27,13 @@ class QueryExpandAgent(Node):
         formatted_history = shared.get("formatted_conversation_history", "")
         demuc = shared.get("demuc", "")
         chu_de_con = shared.get("chu_de_con", "")
-        return query, role, demuc, chu_de_con, formatted_history
+        return {
+            "query": query,
+            "role": role,
+            "demuc": demuc,
+            "chu_de_con": chu_de_con,
+            "formatted_history": formatted_history
+        }
 
     def exec(self, inputs):
         # Import dependencies only when needed
@@ -36,7 +42,11 @@ class QueryExpandAgent(Node):
         from utils.auth import APIOverloadException
         from config.timeout_config import timeout_config
 
-        query, role, demuc, chu_de_con, formatted_history = inputs
+        query = inputs["query"]
+        role = inputs["role"]
+        demuc = inputs["demuc"]
+        chu_de_con = inputs["chu_de_con"]
+        formatted_history = inputs["formatted_history"]
 
         # Build context about the topic classification
         topic_context = ""

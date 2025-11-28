@@ -24,7 +24,11 @@ class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
 
         role = shared.get("role", "")
         formatted_history = shared.get("formatted_conversation_history", "")
-        return query, role, formatted_history
+        return {
+            "query": query,
+            "role": role,
+            "formatted_history": formatted_history
+        }
 
     def exec(self, inputs):
         # Import dependencies only when needed
@@ -33,7 +37,9 @@ class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
         from utils.auth import APIOverloadException
         from config.timeout_config import timeout_config
         from utils.role_enum import RoleEnum, ROLE_DISPLAY_NAME
-        query, role, formatted_history = inputs
+        query = inputs["query"]
+        role = inputs["role"]
+        formatted_history = inputs["formatted_history"]
         user_role_name =  ROLE_DISPLAY_NAME.get(RoleEnum(role))
         # Build conversation history context if available
         history_context = ""

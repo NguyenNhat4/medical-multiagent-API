@@ -9,7 +9,8 @@ Add future nodes (e.g. GreetingResponse) by importing and appending to `__all__`
 # Medical node class imports (split from previous medical_nodes.py)
 from .IngestQuery import IngestQuery
 from .DecideSummarizeConversationToRetriveOrDirectlyAnswer import DecideSummarizeConversationToRetriveOrDirectlyAnswer
-from .RetrieveFromKB import RetrieveFromKB
+from .RetrieveFromKBWithDemuc import RetrieveFromKBWithDemuc
+from .RetrieveFromKBWithoutDemuc import RetrieveFromKBWithoutDemuc
 from .ComposeAnswer import ComposeAnswer
 from .FallbackNode import FallbackNode
 from .RagAgent import RagAgent
@@ -36,7 +37,8 @@ __all__ = [
     # Medical nodes
     "IngestQuery",
     "DecideSummarizeConversationToRetriveOrDirectlyAnswer",
-    "RetrieveFromKB",
+    "RetrieveFromKBWithDemuc",
+    "RetrieveFromKBWithoutDemuc",
     "ComposeAnswer",
     "FallbackNode",
     "RagAgent",

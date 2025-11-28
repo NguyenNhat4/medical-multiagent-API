@@ -57,10 +57,18 @@ class ComposeAnswer(Node):
             logger.warning("✍️ [ComposeAnswer] PREP - No selected IDs, using empty list")
             retrieved_qa = []
 
-        return role, query, retrieved_qa,context_summary
+        return {
+            "role": role,
+            "query": query,
+            "retrieved_qa": retrieved_qa,
+            "context_summary": context_summary
+        }
 
     def exec(self, inputs):
-        role, query, retrieved, context_summary = inputs
+        role = inputs["role"]
+        query = inputs["query"]
+        retrieved = inputs["retrieved_qa"]
+        context_summary = inputs["context_summary"]
 
         # Handle missing or invalid role with fallback
         if role not in PERSONA_BY_ROLE:

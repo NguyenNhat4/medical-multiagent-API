@@ -19,8 +19,8 @@ except Exception as e:
 
 try:
     print("2. Testing core.flows...")
-    from core.flows import create_med_agent_flow, create_oqa_orthodontist_flow
-    print(f"   ✅ Flow functions imported successfully")
+    from core.flows import MedFlow, create_oqa_orthodontist_flow
+    print(f"   ✅ Flow classes/functions imported successfully")
     
 except Exception as e:
     print(f"   ❌ Error importing flows: {e}")
@@ -29,7 +29,7 @@ except Exception as e:
 
 try:
     print("3. Testing flow creation...")
-    med_flow = create_med_agent_flow()
+    med_flow = MedFlow()
     print(f"   ✅ Medical flow created successfully")
     
 except Exception as e:

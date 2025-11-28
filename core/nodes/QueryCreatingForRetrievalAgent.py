@@ -33,7 +33,14 @@ class QueryCreatingForRetrievalAgent(Node):
         context_summary = shared.get("context_summary", "")
         reason = shared.get('create_retrieval_query_reason' , "")
         logger.info(f"🔍 [QueryCreatingForRetrievalAgent] PREP - Query: {query[:50]}..., Role: {role}, DEMUC: {demuc}, CHU_DE_CON: {chu_de_con}")
-        return query, role, demuc, chu_de_con, context_summary,reason
+        return {
+            "query": query,
+            "role": role,
+            "demuc": demuc,
+            "chu_de_con": chu_de_con,
+            "context_summary": context_summary,
+            "reason": reason
+        }
 
     def exec(self, inputs):
         # Import dependencies only when needed
@@ -43,7 +50,12 @@ class QueryCreatingForRetrievalAgent(Node):
         from config.timeout_config import timeout_config
         from utils.role_enum import RoleEnum, ROLE_DISPLAY_NAME
         
-        current_user_input, role, demuc, chu_de_con, context_summary,reason = inputs
+        current_user_input = inputs["query"]
+        role = inputs["role"]
+        demuc = inputs["demuc"]
+        chu_de_con = inputs["chu_de_con"]
+        context_summary = inputs["context_summary"]
+        reason = inputs["reason"]
         vietnameseRole = ROLE_DISPLAY_NAME.get(RoleEnum(role), "Người dùng") # VD role = 'patient_dental' -> vietnameseRole='Bệnh nhân nha khoa'
         
         
@@ -53,8 +65,7 @@ class QueryCreatingForRetrievalAgent(Node):
         reason_final = f"- Lý do cần tạo là: {reason}" if reason else ""
     
         
-        prompt = f"""Bạn là hệ thống tạo câu hỏi để truy vấn  mục tiêu là  lọc ra các câu hỏi liên quan nhất từ bộ câu hỏi QA y khoa.
-
+        prompt = f"""
 BỐI CẢNH:
 -Tóm tắt hội thoại trước đó: {context_summary}
 - Câu hỏi hiện tại của người dùng: "{current_user_input}"
@@ -63,13 +74,12 @@ BỐI CẢNH:
         {topic_context}
 
 NHIỆM VỤ:
-- Tạo một câu hỏi để  truy vấn (retrieval_query) dựa vào bối cảnh đã cung cấp trước đó.
-
+- Viết lại câu hỏi người dùng cho rõ ràng hơn để truy vấn thông tin từ vector database.
 
 Trả về CHỈ một code block YAML hợp lệ:
 
 ```yaml
-retrieval_query: "Câu truy vấn tối ưu để tìm kiếm"
+retrieval_query: "Câu hỏi đã được viết lại cho rõ ràng hơn"
 reason: "Lý do ngắn gọn về cách tạo query"
 confidence: "high"  # hoặc medium, low
 ```"""

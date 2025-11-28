@@ -22,11 +22,11 @@ class FallbackNode(Node):
     """Node fallback khi API quá tải - retrieve query và trả kết quả dựa trên score"""
     
     def prep(self, shared):
-        return None
+        return {}
         
 
     def exec(self, inputs):
-        return None
+        return {}
     
     def post(self, shared, prep_res, exec_res):
         logger.info("🔄 [FallbackNode] POST - Lưu fallback response")

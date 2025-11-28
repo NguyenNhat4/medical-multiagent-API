@@ -25,11 +25,17 @@ class IngestQuery(Node):
         user_input = shared.get("input", "")
         conversation_history = shared.get("conversation_history", [])
         logger.info(f"🔍 [IngestQuery] PREP - Role: {role}, Users Input: {user_input}")
-        return role, user_input, conversation_history
+        return {
+            "role": role,
+            "user_input": user_input,
+            "conversation_history": conversation_history
+        }
 
     def exec(self, inputs):
         logger.info("🔍 [IngestQuery] EXEC - Xử lý role, query và format conversation history")
-        role, user_input, conversation_history = inputs
+        role = inputs["role"]
+        user_input = inputs["user_input"]
+        conversation_history = inputs["conversation_history"]
 
         # Format conversation history (lấy 6 tin nhắn gần nhất - 3 cặp, bot responses truncated)
         formatted_history = self._format_conversation_history(conversation_history)
