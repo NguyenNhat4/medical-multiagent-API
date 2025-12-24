@@ -9,7 +9,6 @@ from .auth import (
     get_current_user,
     Token,
 )
-from .APIKeyManager import APIOverloadException
 
 __all__ = [
     "safe_hash_password",
@@ -17,5 +16,4 @@ __all__ = [
     "create_access_token",
     "get_current_user",
     "Token",
-    "APIOverloadException",
 ]
