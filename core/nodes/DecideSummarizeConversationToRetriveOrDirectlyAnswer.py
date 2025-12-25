@@ -21,13 +21,17 @@ class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
 
     def prep(self, shared):
         query = shared.get("query")
-
         role = shared.get("role", "")
         formatted_history = shared.get("formatted_conversation_history", "")
+
+        # Get relevant memories from shared state
+        relevant_memories = shared.get("relevant_memories", [])
+
         return {
             "query": query,
             "role": role,
-            "formatted_history": formatted_history
+            "formatted_history": formatted_history,
+            "relevant_memories": relevant_memories
         }
 
     def exec(self, inputs):
@@ -37,27 +41,42 @@ class DecideSummarizeConversationToRetriveOrDirectlyAnswer(Node):
         from utils.auth import APIOverloadException
         from config.timeout_config import timeout_config
         from utils.role_enum import RoleEnum, ROLE_DISPLAY_NAME
+
         query = inputs["query"]
         role = inputs["role"]
         formatted_history = inputs["formatted_history"]
-        user_role_name =  ROLE_DISPLAY_NAME.get(RoleEnum(role))
+        relevant_memories = inputs.get("relevant_memories", [])
+
+        user_role_name = ROLE_DISPLAY_NAME.get(RoleEnum(role))
+
         # Build conversation history context if available
         history_context = ""
         if formatted_history:
             history_context = f"""
 Lịch sử hội thoại gần đây:
 {formatted_history}
-
 """
+
+        # Build memory context if available
+        memory_context = ""
+        if relevant_memories:
+            memory_list = "\n".join([f"- {m.get('query', '')}" for m in relevant_memories[:5]]) # Top 5 memories
+            memory_context = f"""
+Các vấn đề người dùng từng quan tâm/hỏi trước đây (Context bộ nhớ):
+{memory_list}
+"""
+
         prompt = f"""Bạn là bot trợ lý y tế, chỉ trao đổi quanh chủ đề y tế.
 {history_context}
+{memory_context}
+
 current user input: "{query}"
 user role: {user_role_name}
 Chọn 1 trong 2 Hành động:
-- direct_response: chào, hỏi người dùng  để hiểu họ cần hỗ trợ gì về y tế, trả lời trực tiếp hội thoại đủ thông tin, hoặc bị lặp lại.
+- direct_response: chào, hỏi người dùng để hiểu họ cần hỗ trợ gì về y tế, trả lời trực tiếp hội thoại đủ thông tin, hoặc bị lặp lại.
 - retrieve_kb: chuyển tiếp cho rag agent tra kiến thức y tế chuẩn để trả lời.
 Lưu ý:
-- Hãy dựa vào ngữ cảnh hội thoại để hiểu câu hỏi và quyết định phù hợp
+- Hãy dựa vào ngữ cảnh hội thoại và lịch sử câu hỏi của người dùng (nếu có) để hiểu câu hỏi và quyết định phù hợp
 
 Nếu chọn direct_response:
 ```yaml

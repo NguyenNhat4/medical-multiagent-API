@@ -47,6 +47,9 @@ class ComposeAnswer(Node):
         selected_ids_by_collection = shared.get("selected_ids_by_collection", {})
         selected_ids = shared.get("selected_ids", [])  # Legacy fallback
         
+        # Get relevant memories
+        relevant_memories = shared.get("relevant_memories", [])
+
         # Map role to collection name (for legacy fallback)
         collection_name = ROLE_TO_COLLECTION.get(role, "bnrhm")
 
@@ -77,7 +80,8 @@ class ComposeAnswer(Node):
             "role": role,
             "query": query,
             "retrieved_qa": retrieved_qa,
-            "context_summary": context_summary
+            "context_summary": context_summary,
+            "relevant_memories": relevant_memories
         }
 
     def exec(self, inputs):
@@ -85,6 +89,7 @@ class ComposeAnswer(Node):
         query = inputs["query"]
         retrieved = inputs["retrieved_qa"]
         context_summary = inputs["context_summary"]
+        relevant_memories = inputs.get("relevant_memories", [])
 
         # Handle missing or invalid role with fallback
         if role not in PERSONA_BY_ROLE:
@@ -95,6 +100,12 @@ class ComposeAnswer(Node):
         # Compact KB context
         relevant_info_from_kb = format_kb_qa_list(retrieved)
 
+        # Build memory context
+        memory_context = ""
+        if relevant_memories:
+            memory_list = "\n".join([f"- {m.get('query', '')}" for m in relevant_memories[:3]])
+            memory_context = f"\nThông tin từ các câu hỏi trước đây của người dùng (tham khảo thêm):\n{memory_list}\n"
+
         prompt = f"""
 Hay cung cấp tri thức y khoa dựa trên cơ sở tri thức do bác sĩ biên soạn.
 User là :{ persona["audience"] }
@@ -102,6 +113,8 @@ Câu hỏi cần trả lời: {query}
 
 Danh sách Q&A đã retrieve:
 {relevant_info_from_kb}
+
+{memory_context}
 
 Lưu ý quan trọng:
 1) Phong cách: { persona["tone"]}.

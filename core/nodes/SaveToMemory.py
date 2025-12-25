@@ -23,8 +23,8 @@ else:
 class SaveToMemory(Node):
     def prep(self, shared):
         user_id = shared.get("user_id")
-        # Use 'input' as it represents the raw user message, or 'query' if processed
-        query = shared.get("query") or shared.get("input", "")
+        # Use 'retrieval_query' if available (often better formatted), else 'query', else 'input'
+        query = shared.get("retrieval_query") or shared.get("query") or shared.get("input", "")
 
         logger.info(f"💾 [SaveToMemory] PREP - User ID: {user_id}, Query: {query[:50] if query else 'None'}...")
 
