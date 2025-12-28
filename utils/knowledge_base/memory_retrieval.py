@@ -86,7 +86,8 @@ def save_user_memory(
     user_id: str,
     query: str,
     qdrant_url: str = QDRANT_URL,
-    collection_name: str = MEMORY_COLLECTION_NAME
+    collection_name: str = MEMORY_COLLECTION_NAME,
+    point_id: Optional[str] = None
 ) -> bool:
     """
     Save a user query to the memory collection.
@@ -96,6 +97,7 @@ def save_user_memory(
         query: The user's query text
         qdrant_url: Qdrant server URL
         collection_name: Memory collection name
+        point_id: Optional point ID for updating existing memory
 
     Returns:
         True if saved successfully, False otherwise
@@ -116,9 +118,14 @@ def save_user_memory(
         sparse_vectors = next(sparse_model.embed([query]))
         late_vectors = next(late_interaction_model.embed([query]))
 
-        # Create Point
-        point_id = str(uuid.uuid4())
-        timestamp = time.time()
+        # Create or update Point
+        if point_id is None:
+            point_id = str(uuid.uuid4())
+            timestamp = time.time()
+            action = "Saved new"
+        else:
+            timestamp = time.time()  # Update timestamp on modification
+            action = "Updated"
 
         point = models.PointStruct(
             id=point_id,
@@ -141,11 +148,48 @@ def save_user_memory(
             points=[point]
         )
 
-        logger.info(f"[Memory] Saved memory for user {user_id}: '{query[:50]}...'")
+        logger.info(f"[Memory] {action} memory for user {user_id}: '{query[:50]}...'")
         return True
 
     except Exception as e:
         logger.error(f"[Memory] Error saving memory: {e}")
+        return False
+
+
+def delete_user_memory(
+    point_ids: List[str],
+    qdrant_url: str = QDRANT_URL,
+    collection_name: str = MEMORY_COLLECTION_NAME
+) -> bool:
+    """
+    Delete user memories by point IDs.
+
+    Args:
+        point_ids: List of point IDs to delete
+        qdrant_url: Qdrant server URL
+        collection_name: Memory collection name
+
+    Returns:
+        True if deleted successfully, False otherwise
+    """
+    if not point_ids:
+        logger.warning("[Memory] No point IDs provided for deletion")
+        return False
+
+    try:
+        client = QdrantClient(url=qdrant_url)
+        client.delete(
+            collection_name=collection_name,
+            points_selector=models.PointIdsList(
+                points=point_ids
+            )
+        )
+
+        logger.info(f"[Memory] Deleted {len(point_ids)} memory points")
+        return True
+
+    except Exception as e:
+        logger.error(f"[Memory] Error deleting memories: {e}")
         return False
 
 
