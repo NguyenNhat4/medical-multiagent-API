@@ -81,7 +81,8 @@ Lưu ý:
 Nếu chọn direct_response:
 ```yaml
 type: direct_response
-explanation: <Câu trả lời của bạn gửi tới user ở đây>
+explanation: |
+    <Câu trả lời của bạn gửi tới user ở đây>
 ```
 
 Nếu chọn retrieve_kb:
@@ -90,35 +91,33 @@ type: retrieve_kb
 context_summary: |
     <sẽ mô tả ngắn gọn lại ngữ cảnh hội thoại để agent khác hiểu>
 ```
+
 Trả về YAML như mẫu :
 """
         logger.info(f"[DecideSummarizeConversationToRetriveOrDirectlyAnswer] prompt: {prompt}")
 
-        try:
-            resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
+        resp = call_llm(prompt, fast_mode=True, max_retry_time=timeout_config.LLM_RETRY_TIMEOUT)
 
-            result = parse_yaml_with_schema(
-                resp,
-                required_fields=["type"],
-                optional_fields=["explanation", "context_summary"],
-                field_types={"type": str, "explanation": str, "context_summary": str}
-            )
+        result = parse_yaml_with_schema(
+            resp,
+            required_fields=["type"],
+            optional_fields=["explanation", "context_summary"],
+            field_types={"type": str, "explanation": str, "context_summary": str}
+        )
+        assert isinstance(result, dict), f"Failed to parse LLM response, got: {resp}"
+        
+        decision_type = result.get("type", "")
+        explanation = result.get("explanation", "")
+        context_summary = result.get("context_summary", "")
+        if decision_type == "direct_response":
+            assert explanation != "" , "Câu trả lời không được rỗng "
+            
 
-            decision_type = result.get("type", "")
-            explanation = result.get("explanation", "")
-            context_summary = result.get("context_summary", "")
-            if decision_type == "direct_response":
-                assert explanation != "" , "Câu trả lời không được rỗng"
-                
+        return {"type": decision_type, "explanation": explanation, "context_summary": context_summary}
 
-            return {"type": decision_type, "explanation": explanation, "context_summary": context_summary}
-
-        except APIOverloadException as e:
-            logger.warning(f"[DecideSummarizeConversationToRetriveOrDirectlyAnswer] EXEC - API overloaded, triggering fallback: {e}")
-            return {"type": "api_overload", "explanation": "", "context_summary": ""}
-        except Exception as e:
-            logger.warning(f"[DecideSummarizeConversationToRetriveOrDirectlyAnswer] EXEC - LLM classification failed: {e}")
-
+    def exec_fallback(self, inputs, exc):
+        return {"type": "direct_response", "explanation": "Xin lỗi, hiện tại tôi không thể xử lý yêu cầu của bạn.", "context_summary": ""}
+        
     def post(self, shared, prep_res, exec_res):
         input_type = exec_res.get("type", "")
         explanation = exec_res.get("explanation", "")
@@ -133,7 +132,7 @@ Trả về YAML như mẫu :
             }
             shared["explain"] = explanation
             shared["suggestion_questions"] = []
-            return "direct_response"
+            return "default"
         elif input_type == "retrieve_kb":
             # Save context summary if provided
             if context_summary and context_summary.strip():

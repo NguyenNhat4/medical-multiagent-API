@@ -112,29 +112,32 @@ confidence: "high"  # hoặc medium, low
 
     def post(self, shared, prep_res, exec_res):
         logger.info(f"🔍 [QueryCreatingForRetrievalAgent] POST - Storing retrieval query")
-        
+
         # Extract results
         retrieval_query = exec_res.get("retrieval_query", "")
         confidence = exec_res.get("confidence", "low")
         reason = exec_res.get("reason", "")
-        
+
         # Store original query if not already stored
         if "original_query" not in shared:
             shared["original_query"] = shared.get("query", "")
-        
+
         # Store retrieval query in shared state
         shared["retrieval_query"] = retrieval_query
         shared["retrieval_query_confidence"] = confidence
         shared["retrieval_query_reason"] = reason
-        
+
+        # Set flag to indicate we came from better_query path (should go to compose_answer after retrieval)
+        shared["from_better_query"] = True
+
         logger.info(f"🔍 [QueryCreatingForRetrievalAgent] POST - Original: '{shared.get('original_query', '')[:50]}...'")
         logger.info(f"🔍 [QueryCreatingForRetrievalAgent] POST - Retrieval query: '{retrieval_query[:50]}...' (confidence: {confidence})")
-        
+
         # Check for API overload
         if exec_res.get("api_overload", False):
             logger.warning("🔍 [QueryCreatingForRetrievalAgent] POST - API overload detected, routing to fallback")
             return "fallback"
-        
+
         return "default"
 
 
