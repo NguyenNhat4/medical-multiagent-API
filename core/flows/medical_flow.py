@@ -67,7 +67,6 @@ class MedFlow(AsyncFlow):
         # Path 1: Retrieval with Demuc (create_retrieval_query -> compose_answer)
         rag_agent - "create_retrieval_query" >> better_retrieval_query >> retrieve_with_demuc
         retrieve_with_demuc - "compose" >> compose_answer  # From better_query path
-        retrieve_with_demuc - "compose" >> memory_manager  # Parallel memory management for compose path
 
         # Path 2: Retrieval loop (retrieve_kb -> loop back to rag_agent with attempts counter)
         rag_agent - "retrieve_kb" >> topic_classify >> retrieve_with_demuc
@@ -76,13 +75,12 @@ class MedFlow(AsyncFlow):
         # Path 3: Direct Compose from RagAgent
         # Parallel: rag_agent leads to BOTH memory_manager AND compose_answer
         rag_agent - "compose_answer" >> compose_answer
-        rag_agent - "compose_answer" >> memory_manager
-
+        compose_answer >> memory_manager
         # ============= MEMORY MANAGEMENT =============
         # MemoryManager orchestrates and routes to worker nodes
         # Worker nodes run in parallel for optimal performance
 
-        memory_manager - "default" >> add_memory >> update_memory >> delete_memory   
+        memory_manager - "default" >> add_memory >> update_memory >> delete_memory  
         memory_manager - "skip" >> None  # No operations needed, end flow
 
         # Fallback paths
