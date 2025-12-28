@@ -121,6 +121,8 @@ Bạn là Memory Manager - hệ thống quản lý bộ nhớ thông minh. Phân
 - Sử dụng Block Scalar (|) cho văn bản
 - Tổ chức operations theo loại: insert_operations, update_operations, delete_operations
 - Mỗi operation có: memory_id (nếu UPDATE/DELETE), content (nếu INSERT/UPDATE)
+- BẮT BUỘC có field "reason" giải thích quyết định
+- Optional: field "importance" (low/medium/high)
 
 # VÍ DỤ:
 ```yaml
@@ -138,7 +140,7 @@ reason: |
 importance: "high"
 ```
 
-Trả về duy nhất một block code YAML:
+Trả về duy nhất một block code YAML (nhớ bao gồm field "reason"):
 """
 
         logger.info(f"🎯 [MemoryManager] EXEC - Analyzing operations with LLM")
@@ -147,8 +149,8 @@ Trả về duy nhất một block code YAML:
 
         result = parse_yaml_with_schema(
             resp,
-            required_fields=["reason"],
-            optional_fields=["insert_operations", "update_operations", "delete_operations", "importance"],
+            required_fields=[],
+            optional_fields=["insert_operations", "update_operations", "delete_operations", "reason", "importance"],
             field_types={
                 "insert_operations": list,
                 "update_operations": list,

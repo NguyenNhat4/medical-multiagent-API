@@ -72,11 +72,12 @@ Câu truy vấn cần tập trung vào:
 - Các cuộc hội thoại trước đây có liên quan
 - Ngữ cảnh và mối quan tâm của người dùng
 
-Trả về CHỈ một code block YAML hợp lệ:
-
+vui lòng trả lời dưới định dạng YAML như sau:
 ```yaml
-memory_query: "Câu truy vấn tối ưu để tìm kiếm memory"
-reason: "Lý do ngắn gọn về cách tạo query"
+memory_query: |
+    Câu truy vấn tối ưu để tìm kiếm memory
+reason: |
+    Lý do ngắn gọn về cách tạo query
 ```"""
 
         logger.info(f"🧠 [RetrieveFromMemory] EXEC - Generating memory query with LLM")
