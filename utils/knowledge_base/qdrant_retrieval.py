@@ -12,6 +12,7 @@ from fastembed import TextEmbedding, LateInteractionTextEmbedding, SparseTextEmb
 import os 
 from dotenv import load_dotenv
 logger = logging.getLogger(__name__)
+import shutil
 
 load_dotenv(override=False)
 
@@ -26,31 +27,85 @@ _late_interaction_model = None
 
 def _get_embedding_models():
     """
-    Lazy load embedding models (singleton pattern) with cache support.
-    Models are loaded from cache directory to avoid re-downloading.
-
-    Returns: (dense_model, sparse_model, late_interaction_model)
+    Lazy load embedding models (singleton pattern) with auto-recovery from corruption.
     """
     global _dense_model, _sparse_model, _late_interaction_model
 
     if _dense_model is None:
         logger.info(f"[Qdrant] Loading embedding models from cache: {FASTEMBED_CACHE}")
-        _dense_model = TextEmbedding(
-            "sentence-transformers/all-MiniLM-L6-v2",
-            cache_dir=FASTEMBED_CACHE
-        )
-        _sparse_model = SparseTextEmbedding(
-            "Qdrant/bm25",
-            cache_dir=FASTEMBED_CACHE
-        )
-        _late_interaction_model = LateInteractionTextEmbedding(
-            "colbert-ir/colbertv2.0",
-            cache_dir=FASTEMBED_CACHE
-        )
-        logger.info("[Qdrant] Embedding models loaded from cache successfully")
+
+        # Helper function to load models, helps reuse retry logic
+        def load_models():
+            return (
+                TextEmbedding("sentence-transformers/all-MiniLM-L6-v2", cache_dir=FASTEMBED_CACHE, providers=['CPUExecutionProvider']),
+                SparseTextEmbedding("Qdrant/bm25", cache_dir=FASTEMBED_CACHE),
+                LateInteractionTextEmbedding("colbert-ir/colbertv2.0", cache_dir=FASTEMBED_CACHE)
+            )
+
+        def clear_all_model_caches():
+            """Clear all model caches in case of corruption."""
+            model_patterns = [
+                "models--sentence-transformers--all-MiniLM-L6-v2",
+                "models--qdrant--all-MiniLM-L6-v2-onnx",
+                "models--Qdrant--bm25",
+                "models--colbert-ir--colbertv2.0",
+            ]
+
+            for pattern in model_patterns:
+                model_path = os.path.join(FASTEMBED_CACHE, pattern)
+                if os.path.exists(model_path):
+                    logger.warning(f"[Qdrant] Deleting potentially corrupted cache: {model_path}")
+                    try:
+                        shutil.rmtree(model_path)
+                    except Exception as rm_error:
+                        logger.error(f"[Qdrant] Could not delete {model_path}: {rm_error}")
+
+        max_retries = 3
+        for attempt in range(1, max_retries + 1):
+            try:
+                logger.info(f"[Qdrant] Loading models (attempt {attempt}/{max_retries})...")
+                _dense_model, _sparse_model, _late_interaction_model = load_models()
+                logger.info("[Qdrant] ✅ Embedding models loaded successfully")
+                break
+
+            except Exception as e:
+                error_msg = str(e)
+
+                # Check if it's a corruption or download error
+                is_corruption = any(keyword in error_msg.lower() for keyword in [
+                    'modelproto does not have a graph',
+                    'onnxruntimeerror',
+                    'corrupted',
+                    'download',
+                    'incomplete',
+                    'could not download'
+                ])
+
+                if is_corruption:
+                    logger.warning(f"[Qdrant] ⚠️ Model corruption/download error detected (attempt {attempt}/{max_retries}): {e}")
+
+                    if attempt < max_retries:
+                        logger.info(f"[Qdrant] 🧹 Clearing model caches and retrying...")
+                        clear_all_model_caches()
+
+                        # Wait before retry
+                        import time
+                        wait_time = 2 ** attempt  # Exponential backoff: 2, 4, 8 seconds
+                        logger.info(f"[Qdrant] ⏳ Waiting {wait_time} seconds before retry...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error(f"[Qdrant] ❌ Failed to load models after {max_retries} attempts")
+                        logger.error(f"[Qdrant] Please check your internet connection and Docker build logs")
+                        raise RuntimeError(
+                            f"Failed to load embedding models after {max_retries} attempts. "
+                            "The models may be corrupted. Please rebuild the Docker image or clear the model cache."
+                        ) from e
+                else:
+                    # Non-corruption error, raise immediately
+                    logger.error(f"[Qdrant] ❌ Failed to load embedding models: {e}")
+                    raise
 
     return _dense_model, _sparse_model, _late_interaction_model
-
 
 def retrieve_from_qdrant(
     query: str,

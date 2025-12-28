@@ -42,6 +42,9 @@ class RagAgent(Node):
         context_summary = shared.get("context_summary", "")
         action_history = shared.get("action_history", [])
         
+        # Get relevant memories
+        relevant_memories = shared.get("relevant_memories", [])
+
         # Hard check: Force compose_answer if max attempts reached to prevent infinite loops
         if attempts > MAX_RETRIEVAL_LOOPS:
             return None  # Signal to exec to skip LLM call and return compose_answer
@@ -52,13 +55,14 @@ class RagAgent(Node):
             "attempts": attempts,
             "selected_questions": selected_questions,
             "context_summary": context_summary,
-            "action_history": action_history
+            "action_history": action_history,
+            "relevant_memories": relevant_memories
         }
 
     def exec(self, inputs):
         from utils.llm import call_llm
         from utils.parsing import parse_yaml_with_schema
-        from utils.auth import APIOverloadException
+        from utils.llm.call_llm import APIOverloadException
         from config.timeout_config import timeout_config
         
         # Handle hard check fallback from prep()
@@ -71,8 +75,17 @@ class RagAgent(Node):
         selected_questions = inputs["selected_questions"]
         context_summary = inputs["context_summary"]
         action_history = inputs["action_history"]
+        relevant_memories = inputs.get("relevant_memories", [])
+
         conversation_context = f"Hội thoại tóm tắt (Context): {context_summary}" if context_summary else "Hội thoại vừa bắt đầu."
         current_knowledge = selected_questions if selected_questions else "Chưa có thông tin (Empty)"
+
+        # Build memory context
+        memory_context = ""
+        if relevant_memories:
+            memory_list = "\n".join([f"- {m.get('query', '')}" for m in relevant_memories[:5]])
+            memory_context = f"Lịch sử quan tâm của người dùng (Memory):\n{memory_list}"
+
         prompt = f"""Bạn là Orchestrator RAG Agent đưa ra quyết định dựa vào thông tin sau.
 User query: "{query}"
 Attempts: {attempts}/{MAX_RETRIEVAL_LOOPS}
@@ -80,7 +93,10 @@ Attempts: {attempts}/{MAX_RETRIEVAL_LOOPS}
 Trạng thái trước đó: {rag_state}
 Thông tin đã tìm được với query: 
 {current_knowledge}
+
 {conversation_context}
+{memory_context}
+
 Tiêu chí đánh giá:
 Chọn một trong các actions sau:
 - create_retrieval_query: Update usser query  không có đầy đủ dấu hoặc viết tắt, hoặc chưa rõ ràng.
@@ -132,14 +148,17 @@ Trả về chính xác cấu trúc yml trên:
         action_history = exec_res.get("action_history", [])
         current_attempts = exec_res.get("attempts", 0)
         shared['create_retrieval_query_reason'] = ""
-        
+
         # Update state based on next action
         if next_action == "retrieve_kb":
             # Safety check: prevent infinite loops even if LLM decides to retrieve again
             if current_attempts >= MAX_RETRIEVAL_LOOPS:
                 shared["rag_state"] = "composing"
                 return "compose_answer"
-            
+
+            # Increment attempts counter when doing retrieval
+            shared["attempts"] = current_attempts + 1
+            logger.info(f"  [RagAgent] POST - Incremented attempts to {shared['attempts']}")
             return "retrieve_kb"
         elif next_action == "compose_answer":
             shared["rag_state"] = "composing"
@@ -147,6 +166,9 @@ Trả về chính xác cấu trúc yml trên:
         elif next_action == "create_retrieval_query":
             shared['create_retrieval_query_reason'] = reason
             shared["rag_state"] = "create_retrieval_query_reason"
+            # Increment attempts counter when creating retrieval query (counts as a retrieval attempt)
+            shared["attempts"] = current_attempts + 1
+            logger.info(f"  [RagAgent] POST - Incremented attempts to {shared['attempts']}")
             return "create_retrieval_query"
         else:
             return "compose_answer"

@@ -141,7 +141,7 @@ class RetrieveFromKBWithDemuc(Node):
 
         # Save lightweight candidates to shared store
         shared["retrieved_candidates"] = candidates
-        
+
         # Group IDs by collection for efficient multi-collection retrieval
         ids_by_collection = {}
         for c in candidates:
@@ -149,15 +149,25 @@ class RetrieveFromKBWithDemuc(Node):
             if collection not in ids_by_collection:
                 ids_by_collection[collection] = []
             ids_by_collection[collection].append(c["id"])
-        
+
         # Save both formats for compatibility
         shared["selected_ids"] = [c["id"] for c in candidates]  # Legacy format
         shared["selected_ids_by_collection"] = ids_by_collection  # New format for multi-collection
         shared["selected_questions"] = [c["CAUHOI"] for c in candidates]
-        
+
         logger.info(f"📚 [RetrieveFromKBWithDemuc] POST - IDs grouped by collection: {[(k, len(v)) for k, v in ids_by_collection.items()]}")
-        
+
         # Update RAG state
         shared["rag_state"] = "retrieved"
-        return "default"
+
+        # Check where we came from to route appropriately
+        # If we came from create_retrieval_query path (rag_state was "create_retrieval_query_reason")
+        # we go directly to compose_answer
+        # Otherwise (from retrieve_kb path), we loop back to rag_agent
+        if shared.get("from_better_query", False):
+            # Reset flag
+            shared["from_better_query"] = False
+            return "compose"  # Go to compose_answer
+        else:
+            return "loop"  # Go back to rag_agent
 

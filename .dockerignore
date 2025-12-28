@@ -4,94 +4,58 @@
 .gitattributes
 
 # Python
-__pycache__/
+__pycache__
 *.py[cod]
 *$py.class
 *.so
 .Python
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-MANIFEST
-
-# Exclude uppercase Python files (case sensitivity issues)
-*.PY
-
-# Virtual environments
-.env
+*.egg-info
+dist
+build
 .venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
+venv
+env
 
-# IDE
-.vscode/
-.idea/
+# IDEs
+.vscode
+.idea
 *.swp
 *.swo
 *~
 
-# Jupyter Notebook
+# Jupyter
 .ipynb_checkpoints
+*.ipynb
 
-# pytest
-.pytest_cache/
-.coverage
-htmlcov/
+# Documentation
+*.md
+docs/
+
+# Docker
+Dockerfile*
+.dockerignore
+docker-compose*.yml
+
+# CI/CD
+.github
+.gitlab-ci.yml
 
 # Logs
 *.log
-logs/*
-!logs/.gitkeep
-conversation.log
-conversation_backup_*.log
+logs/
+
+# Test
+tests/
+test_*.py
+*_test.py
+.pytest_cache
+.coverage
 
 # OS
 .DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
 Thumbs.db
 
-# Docker
-Dockerfile
-.dockerignore
-docker-compose.yml
-docker-compose.*.yml
-
-# Documentation
-README.md
-docs/
-*.md
-
-# Tests
-tests/
-test_*
-
-# Temporary files
-tmp/
-temp/
-*.tmp
-*.temp
-
-# Local config files that shouldn't be in container
-.env.local
-.env.development
-.env.test
-.env.production
+# Models (if already in cache)
+models/
+*.bin
+*.onnx

@@ -15,7 +15,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
     env_file:
-      - .env
+      - .env.docker
     networks:
       - chatbot-network
     restart: unless-stopped
@@ -44,12 +44,15 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      cache_from:
+        - chatbot-rhm-api:latest
     container_name: chatbot-rhm-api
     ports:
       - "${API_PORT}:8000"
     env_file:
       - .env
     environment:
+      - LANGFUSE_LOG_LEVEL=warn
       - RELOAD=true
       - DEBUG=true
       - API_HOST=${API_HOST}
@@ -58,6 +61,7 @@ services:
       - QDRANT_URL=http://${QDRANT_HOST}:${QDRANT_PORT}   # <— thêm dòng này
     volumes:
       - .:/app
+      - models_cache:/app/models 
     networks:
       - chatbot-network
     depends_on:
@@ -87,4 +91,5 @@ volumes:
   qdrant_data:
   qdrant_snapshots:
   logs:
+  models_cache:
   pgadmin_data:

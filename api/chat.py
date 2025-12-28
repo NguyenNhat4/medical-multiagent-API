@@ -209,7 +209,7 @@ async def chat(
                     )
                     try:
                         flow = get_oqa_flow()
-                        flow.run(shared)
+                        await flow.run_async(shared)
                     except Exception as e:
                         logger.error(f" OQA flow execution failed: {str(e)}")
                         # Provide fallback response
@@ -223,7 +223,7 @@ async def chat(
                     )
                     try:
                         flow = get_med_flow()
-                        flow.run(shared)
+                        await flow.run_async(shared)
                     except Exception as e:
                         logger.error(f" Medical flow execution failed: {str(e)}")
                         # Provide fallback response

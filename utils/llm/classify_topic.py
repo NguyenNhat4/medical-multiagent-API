@@ -12,7 +12,7 @@ import logging
 from typing import Dict, Any , List
 from utils.llm import call_llm
 from utils.parsing import parse_yaml_with_schema
-from utils.auth import APIOverloadException
+from utils.llm.call_llm import APIOverloadException
 from config.timeout_config import timeout_config
 
 logger = logging.getLogger(__name__)
