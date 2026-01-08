@@ -10,12 +10,13 @@ from pydantic import BaseModel, Field
 from utils.timezone_utils import get_vietnam_time
 import os
 import socket
-from qdrant_client import QdrantClient
+
+from utils.qdrant.client import get_client
+from utils.qdrant.config import QDRANT_URL, ALL_COLLECTIONS
+from utils.qdrant.embeddings import EmbeddingService
 from utils.knowledge_base.loadvector_qdrant import (
-    EmbeddingModels,
     load_all_collections,
-    COLLECTION_CONFIGS,
-    QDRANT_URL
+    COLLECTION_CONFIGS
 )
 
 
@@ -39,7 +40,7 @@ class CollectionLoadRequest(BaseModel):
     )
     qdrant_url: Optional[str] = Field(
        QDRANT_URL,
-        description="Optional Qdrant server URL override"
+        description="Optional Qdrant server URL override (Ignored in new architecture)"
     )
 
 
@@ -72,8 +73,6 @@ async def get_available_collections():
     Returns the collection names defined in the system configuration.
     """
     try:
-        from utils.knowledge_base.loadvector_qdrant import COLLECTION_CONFIGS
-
         return AvailableCollectionsResponse(
             collections=list(COLLECTION_CONFIGS.keys()),
             timestamp=get_vietnam_time().isoformat()
@@ -99,13 +98,8 @@ async def load_embeddings(
 
     - **collections**: Optional list of specific collections to load (default: all)
     - **recreate**: Whether to recreate existing collections (default: false)
-    - **qdrant_url**: Optional Qdrant server URL override
-
-    The operation will skip collections that already have data unless recreate=true.
     """
     try:
-       
-
         logger.info(f"📥 Loading embeddings request received")
         logger.info(f"   Collections: {request.collections or 'all'}")
         logger.info(f"   Recreate: {request.recreate}")
@@ -123,33 +117,36 @@ async def load_embeddings(
                            f"Available collections: {list(COLLECTION_CONFIGS.keys())}"
                 )
         
-        # Determine Qdrant URL
-        qdrant_url = request.qdrant_url if request.qdrant_url and request.qdrant_url != "string" else QDRANT_URL
-        if not qdrant_url:
-            raise HTTPException(
-                status_code=400,
-                detail="Qdrant URL not provided and QDRANT_URL environment variable not set"
-            )
-
         # Initialize Qdrant client
-        logger.info(f"🔗 Connecting to Qdrant at {qdrant_url}")
         try:
-            client = QdrantClient(qdrant_url)
+            client = get_client()
         except Exception as e:
             logger.error(f"❌ Failed to connect to Qdrant: {str(e)}")
             raise HTTPException(
                 status_code=503,
-                detail=f"Failed to connect to Qdrant at {qdrant_url}: {str(e)}"
+                detail=f"Failed to connect to Qdrant: {str(e)}"
             )
 
-        # Load embedding models
-        logger.info("  Loading embedding models...")
-        models = EmbeddingModels()
-        models.load()
-        logger.info("✅ Embedding models loaded successfully")
+        # Load embedding models (using legacy wrapper adaptation for now)
+        # load_all_collections expects an object with .load() and .dense_model etc.
+        # We need to adapt EmbeddingService to look like EmbeddingModels class in loadvector_qdrant.py
+        # Or even better, we should refactor loadvector_qdrant.py too.
+        # For now, let's create a temporary adapter.
+
+        class EmbeddingModelsAdapter:
+            def __init__(self):
+                self.dense_model, self.sparse_model, self.late_interaction_model = EmbeddingService.get_models()
+            def load(self):
+                pass
+
+        models = EmbeddingModelsAdapter()
 
         # Load collections
         logger.info("📚 Starting collection loading...")
+
+        # We need to call load_all_collections but it is designed to work with local models variable.
+        # Let's import it.
+
         results = load_all_collections(
             client=client,
             models=models,
@@ -227,13 +224,7 @@ async def get_collection_status(collection_name: str):
     Returns information about whether the collection exists and how many points it contains.
     """
     try:
-        import os
-        from qdrant_client import QdrantClient
-        from utils.knowledge_base.loadvector_qdrant import (
-            COLLECTION_CONFIGS,
-            collection_has_data,
-            QDRANT_URL
-        )
+        from utils.knowledge_base.loadvector_qdrant import collection_has_data
 
         # Validate collection name
         if collection_name not in COLLECTION_CONFIGS:
@@ -243,15 +234,7 @@ async def get_collection_status(collection_name: str):
                        f"Available collections: {list(COLLECTION_CONFIGS.keys())}"
             )
 
-        # Connect to Qdrant
-        qdrant_url = QDRANT_URL
-        if not qdrant_url:
-            raise HTTPException(
-                status_code=500,
-                detail="QDRANT_URL environment variable not set"
-            )
-
-        client = QdrantClient(qdrant_url)
+        client = get_client()
 
         # Check collection status
         has_data, points_count = collection_has_data(client, collection_name)

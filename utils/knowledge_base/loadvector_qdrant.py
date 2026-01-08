@@ -11,32 +11,29 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Any
 
 import pandas as pd
-from fastembed import TextEmbedding, LateInteractionTextEmbedding, SparseTextEmbedding
 from qdrant_client import QdrantClient, models
-from qdrant_client.models import Distance, VectorParams, PointStruct
-import os 
-from dotenv import load_dotenv
+from qdrant_client.models import PointStruct
 
-load_dotenv(override=False)
-
+from utils.qdrant.config import (
+    QDRANT_URL,
+    FASTEMBED_CACHE,
+    COLLECTION_BNDTD, COLLECTION_BSNT, COLLECTION_BNRHM, COLLECTION_BSRHM,
+    VECTOR_DENSE, VECTOR_LATE,
+    get_vector_params, get_sparse_vector_params
+)
+from utils.qdrant.embeddings import EmbeddingService
+from utils.qdrant.client import get_client
 
 # Constants
-QDRANT_URL = os.getenv("QDRANT_URL")
 BATCH_SIZE = 64
 CSV_BASE_PATH = "medical_knowledge_base"
-DENSE_MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-SPARSE_MODEL_NAME = "Qdrant/bm25"
-LATE_INTERACTION_MODEL_NAME = "colbert-ir/colbertv2.0"
-
-# Cache directory for embedding models
-FASTEMBED_CACHE = os.getenv("FASTEMBED_CACHE_PATH", "./models")
 
 # Collection configurations: collection_name -> (csv_filename, required_columns)
 COLLECTION_CONFIGS = {
-    "bndtd": ("bndtd.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
-    "bsnt": ("bsnt.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
-    "bnrhm": ("bnrhm.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
-    "bsrhm": ("bsrhm.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI"]),  # No GIAITHICH
+    COLLECTION_BNDTD: ("bndtd.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
+    COLLECTION_BSNT: ("bsnt.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
+    COLLECTION_BNRHM: ("bnrhm.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI", "GIAITHICH"]),
+    COLLECTION_BSRHM: ("bsrhm.csv", ["DEMUC", "CHUDECON", "CAUHOI", "CAUTRALOI"]),  # No GIAITHICH
 }
 
 # Abbreviation expansion mapping
@@ -68,7 +65,10 @@ def expand_abbreviations(text: str) -> str:
 
 
 class EmbeddingModels:
-    """Container for embedding models with lazy loading and cache support."""
+    """
+    Legacy Adapter: Container for embedding models with lazy loading and cache support.
+    Uses EmbeddingService under the hood.
+    """
 
     def __init__(self):
         self.dense_model = None
@@ -78,37 +78,13 @@ class EmbeddingModels:
     def load(self):
         """Load all embedding models from cache directory."""
         print(f"Loading embedding models from cache: {FASTEMBED_CACHE}")
-        print(f"  - Dense model: {DENSE_MODEL_NAME}")
-        self.dense_model = TextEmbedding(
-            DENSE_MODEL_NAME,
-            cache_dir=FASTEMBED_CACHE
-        )
-
-        print(f"  - Sparse model: {SPARSE_MODEL_NAME}")
-        self.sparse_model = SparseTextEmbedding(
-            SPARSE_MODEL_NAME,
-            cache_dir=FASTEMBED_CACHE
-        )
-
-        print(f"  - Late interaction model: {LATE_INTERACTION_MODEL_NAME}")
-        self.late_interaction_model = LateInteractionTextEmbedding(
-            LATE_INTERACTION_MODEL_NAME,
-            cache_dir=FASTEMBED_CACHE
-        )
-
+        self.dense_model, self.sparse_model, self.late_interaction_model = EmbeddingService.get_models()
         print("All models loaded from cache successfully.\n")
 
 
 def load_csv_data(csv_path: str, required_columns: List[str]) -> List[Dict[str, str]]:
     """
     Load CSV data and extract required columns.
-
-    Args:
-        csv_path: Path to the CSV file
-        required_columns: List of columns to extract
-
-    Returns:
-        List of dictionaries containing the required columns
     """
     print(f"Loading CSV file: {csv_path}")
 
@@ -139,19 +115,13 @@ def generate_embeddings(
 ) -> Tuple[List, List, List]:
     """
     Generate embeddings for documents using all three models.
-
-    Args:
-        docs: List of document dictionaries
-        models: EmbeddingModels instance with loaded models
-
-    Returns:
-        Tuple of (dense_embeddings, sparse_embeddings, late_interaction_embeddings)
     """
     print("Generating embeddings...")
 
     # Extract questions for embedding
     questions = [doc["CAUHOI"] for doc in docs]
 
+    # Use the models attached to the wrapper
     print("  - Generating dense embeddings...")
     dense_embeddings = list(models.dense_model.embed(questions))
 
@@ -169,13 +139,6 @@ def generate_embeddings(
 def collection_has_data(client: QdrantClient, collection_name: str) -> Tuple[bool, int]:
     """
     Check if a collection exists and has data.
-
-    Args:
-        client: QdrantClient instance
-        collection_name: Name of the collection to check
-
-    Returns:
-        Tuple of (has_data: bool, points_count: int)
     """
     try:
         # Check if collection exists
@@ -204,16 +167,6 @@ def create_collection(
 ) -> bool:
     """
     Create a Qdrant collection with hybrid search configuration.
-
-    Args:
-        client: QdrantClient instance
-        collection_name: Name of the collection to create
-        dense_dim: Dimension of dense embeddings
-        late_dim: Dimension of late interaction embeddings
-        recreate: If True, delete existing collection before creating
-
-    Returns:
-        True if collection was created, False if it already exists
     """
     print(f"Setting up collection: {collection_name}")
 
@@ -231,27 +184,16 @@ def create_collection(
 
     print(f"  - Creating collection with hybrid search configuration...")
 
+    # Use centralized config helpers
+    # Note: we are passing qdrant_client.models to the helpers.
+    # But wait, config.py doesn't import models to avoid circular dep (or so I wrote).
+    # Actually config.py imports nothing from qdrant_client except type hints if I'm careful.
+    # Let's check config.py content again.
+
     client.create_collection(
         collection_name=collection_name,
-        vectors_config={
-            "all-MiniLM-L6-v2": models.VectorParams(
-                size=dense_dim,
-                distance=models.Distance.COSINE,
-            ),
-            "colbertv2.0": models.VectorParams(
-                size=late_dim,
-                distance=models.Distance.COSINE,
-                multivector_config=models.MultiVectorConfig(
-                    comparator=models.MultiVectorComparator.MAX_SIM,
-                ),
-                hnsw_config=models.HnswConfigDiff(m=0)  # Disable HNSW for reranking
-            ),
-        },
-        sparse_vectors_config={
-            "bm25": models.SparseVectorParams(
-                modifier=models.Modifier.IDF
-            )
-        }
+        vectors_config=get_vector_params(models),
+        sparse_vectors_config=get_sparse_vector_params(models)
     )
 
     print(f"  - Collection created successfully\n")
@@ -266,15 +208,6 @@ def prepare_points(
 ) -> List[PointStruct]:
     """
     Prepare PointStruct objects for uploading to Qdrant.
-
-    Args:
-        docs: List of document dictionaries
-        dense_embeddings: List of dense embeddings
-        sparse_embeddings: List of sparse embeddings
-        late_interaction_embeddings: List of late interaction embeddings
-
-    Returns:
-        List of PointStruct objects
     """
     print("Preparing points for upload...")
 
@@ -298,9 +231,10 @@ def prepare_points(
         point = PointStruct(
             id=idx,
             vector={
-                "all-MiniLM-L6-v2": dense_emb,
-                "bm25": sparse_emb.as_object(),
-                "colbertv2.0": late_emb,
+                VECTOR_DENSE: dense_emb,
+                "bm25": sparse_emb.as_object(), # Using hardcoded string "bm25" in original, which matches VECTOR_SPARSE?
+                # In config.py: VECTOR_SPARSE = "bm25". Correct.
+                VECTOR_LATE: late_emb,
             },
             payload=payload
         )
@@ -318,12 +252,6 @@ def upsert_in_batches(
 ) -> None:
     """
     Upload points to Qdrant collection in batches.
-
-    Args:
-        client: QdrantClient instance
-        collection_name: Name of the collection
-        points: List of PointStruct objects
-        batch_size: Number of points per batch
     """
     print(f"Uploading {len(points)} points in batches of {batch_size}...")
 
@@ -353,17 +281,6 @@ def load_single_collection(
 ) -> bool:
     """
     Load a single collection from CSV into Qdrant.
-
-    Args:
-        collection_name: Name of the Qdrant collection
-        csv_filename: Name of the CSV file
-        required_columns: List of required columns
-        client: QdrantClient instance
-        models: EmbeddingModels instance
-        recreate: Whether to recreate existing collection
-
-    Returns:
-        True if successful, False otherwise
     """
     print("=" * 70)
     print(f"LOADING COLLECTION: {collection_name}")
@@ -418,15 +335,6 @@ def load_all_collections(
 ) -> Dict[str, bool]:
     """
     Load all or specified collections into Qdrant.
-
-    Args:
-        client: QdrantClient instance
-        models: EmbeddingModels instance
-        collections: List of collection names to load (None = all)
-        recreate: Whether to recreate existing collections
-
-    Returns:
-        Dictionary mapping collection names to success status
     """
     results = {}
 
@@ -509,8 +417,16 @@ def main():
 
     try:
         # Initialize Qdrant client
-        print(f"Connecting to Qdrant at {args.url}...")
-        client = QdrantClient(args.url)
+        # In main, we can ignore the passed URL if we want strict singleton usage,
+        # but for CLI flexibility we might want to allow it.
+        # However, our ClientManager reads from env.
+        # If args.url is different, we might have an issue.
+        # For consistency with the refactor, let's use the singleton client.
+        print(f"Connecting to Qdrant (URL from ENV: {QDRANT_URL})...")
+        if args.url != QDRANT_URL:
+             print(f"Warning: --url argument ignored in favor of centralized configuration.")
+
+        client = get_client()
         print("Connected successfully.\n")
 
         # Load embedding models
