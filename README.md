@@ -5,7 +5,7 @@ This project is an intelligent Multi-Agent system designed to serve as a reliabl
 # System architecture diagram
 ![alt text](images/system-architecture.png)
 
-# Medflow diagram
+# Med flows diagram
 ![alt text](images/medflow.png)
 
 # User agentic memory diagram
